@@ -1,17 +1,19 @@
 /**
  * components/Navbar.jsx — Left sidebar navigation
  */
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Briefcase, Upload, Bell, CheckCircle2,
-  Settings, Zap, Activity
+  Settings, LogOut, CalendarDays
 } from 'lucide-react';
 import { getStats, getHealth } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/opportunities', icon: Briefcase, label: 'Opportunities' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { to: '/applications', icon: CheckCircle2, label: 'Applications' },
   { to: '/reminders', icon: Bell, label: 'Reminders' },
   { to: '/import', icon: Upload, label: 'Import' },
@@ -21,6 +23,8 @@ const navItems = [
 export default function Navbar() {
   const [stats, setStats] = useState({});
   const [health, setHealth] = useState({ userbot_running: false });
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const load = async () => {
@@ -37,6 +41,11 @@ export default function Navbar() {
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside className="sidebar">
@@ -67,7 +76,11 @@ export default function Navbar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="system-status">
+        <button onClick={handleLogout} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--text-secondary)' }}>
+          <LogOut size={16} />
+          Logout
+        </button>
+        <div className="system-status" style={{ marginTop: 8 }}>
           <div className={`status-dot ${health.userbot_running ? 'online' : 'offline'}`} />
           <span>
             {health.userbot_running ? 'Listening live' : 'Userbot offline'}

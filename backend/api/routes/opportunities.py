@@ -198,3 +198,86 @@ async def delete_opportunity(opp_id: str):
         raise HTTPException(404, "Not found")
     await cancel_all_reminders(opp_id)
     return {"ok": True}
+
+
+@router.get("/meta/calendar")
+async def get_calendar():
+    col = opportunities_col()
+    events = []
+    async for opp in col.find({"status": {"$nin": ["IGNORED"]}}):
+        company = opp.get("company", "Unknown")
+        opp_id = str(opp["_id"])
+        for field, label, color in [
+            ("deadline", "Deadline", "red"),
+            ("assessment_date", "Assessment", "orange"),
+            ("interview_date", "Interview", "green"),
+        ]:
+            val = opp.get(field)
+            if val:
+                if isinstance(val, datetime):
+                    date_str = val.date().isoformat()
+                else:
+                    try:
+                        date_str = datetime.fromisoformat(str(val)).date().isoformat()
+                    except Exception:
+                        continue
+                events.append({
+                    "date": date_str,
+                    "type": label,
+                    "color": color,
+                    "company": company,
+                    "role": opp.get("role"),
+                    "opp_id": opp_id,
+                    "status": opp.get("status"),
+                })
+    return {"events": events}
+
+@router.get("/meta/briefing")
+async def get_briefing():
+    col = opportunities_col()
+    import pytz
+    IST = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(IST)
+    hour = now.hour
+
+    greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
+
+    total_active = await col.count_documents({"status": {"$nin": ["APPLIED", "IGNORED"]}})
+    applied = await col.count_documents({"status": "APPLIED"})
+
+    yesterday = datetime.utcnow() - timedelta(hours=24)
+    new_since_yesterday = await col.count_documents({
+        "created_at": {"$gte": yesterday},
+        "status": {"$nin": ["IGNORED"]}
+    })
+
+    urgent = []
+    async for opp in col.find({"status": {"$nin": ["APPLIED", "IGNORED"]}, "deadline": {"$ne": None}}):
+        u = _opp_urgency(opp)
+        if u in ("TODAY", "WITHIN_24H", "TOMORROW"):
+            urgent.append({
+                "company": opp.get("company", "Unknown"),
+                "role": opp.get("role"),
+                "urgency": u,
+                "deadline": opp["deadline"].isoformat() if isinstance(opp.get("deadline"), datetime) else opp.get("deadline"),
+                "opp_id": str(opp["_id"]),
+            })
+
+    parts = []
+    if new_since_yesterday:
+        parts.append(f"📬 {new_since_yesterday} new drive{'s' if new_since_yesterday > 1 else ''} since yesterday")
+    if urgent:
+        parts.append(f"⚡ {len(urgent)} urgent deadline{'s' if len(urgent) > 1 else ''} approaching")
+    if total_active:
+        parts.append(f"📋 {total_active} pending")
+    if applied:
+        parts.append(f"✅ {applied} applied")
+
+    return {
+        "greeting": greeting,
+        "message": " · ".join(parts) if parts else "All caught up! Keep checking for new drives.",
+        "new_since_yesterday": new_since_yesterday,
+        "urgent": urgent,
+        "total_active": total_active,
+        "applied": applied,
+    }

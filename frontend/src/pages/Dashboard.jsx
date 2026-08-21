@@ -5,7 +5,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStats, getOpportunities } from '../api/client';
+import api from '../api/client';
 import OpportunityCard from '../components/OpportunityCard';
+import { Briefcase, CheckCircle, Clock, AlertTriangle, Sparkles } from 'lucide-react';
 
 const URGENCY_SECTIONS = [
   {
@@ -48,17 +50,20 @@ const URGENCY_SECTIONS = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
+  const [briefing, setBriefing] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showOnlyEligible, setShowOnlyEligible] = useState(false);
 
   const load = async () => {
     try {
-      const [s, o] = await Promise.all([
+      const [s, o, b] = await Promise.all([
         getStats(),
         getOpportunities({ limit: 100 }),
+        api.get('/api/opportunities/meta/briefing').then(r => r.data).catch(() => null)
       ]);
       setStats(s);
+      setBriefing(b);
       setOpportunities(o.opportunities || []);
     } catch (e) {
       console.error(e);
@@ -119,14 +124,14 @@ export default function Dashboard() {
           Placement Control Center
         </div>
         <h1 className="page-title" style={{ fontSize: '2.2rem' }}>
-          What do you need to<br />
-          <span style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            apply for RIGHT NOW?
+          {briefing ? briefing.greeting : 'Welcome back'}, Sunil!<br />
+          <span style={{ fontSize: '1.4rem', color: 'var(--text-secondary)' }}>
+            What do you need to <span style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>apply for RIGHT NOW?</span>
           </span>
         </h1>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <p className="page-subtitle" style={{ margin: 0 }}>
-            AI-monitored placements · Never miss an opportunity
+          <p className="page-subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--blue)' }}>
+            <Sparkles size={16} /> {briefing ? briefing.message : 'AI-monitored placements · Never miss an opportunity'}
           </p>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
             <input 

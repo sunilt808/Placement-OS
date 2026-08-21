@@ -37,10 +37,10 @@ export default function Applications() {
         <>
           <div className="opp-grid">
             {opportunities.map(opp => (
-              <OpportunityCard 
-                key={opp._id} 
-                opp={opp} 
-                onStatusChange={handleStatusChange} 
+              <OpportunityCard
+                key={opp._id}
+                opp={opp}
+                onStatusChange={handleStatusChange}
               />
             ))}
           </div>
