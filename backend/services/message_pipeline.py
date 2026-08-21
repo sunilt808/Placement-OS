@@ -8,13 +8,13 @@ Pipeline:
   raw message
     → content hash check (dedup)
     → save raw message to DB
-    → AI extraction (flash → pro if needed)
+    → AI extraction (local first, Gemini enhancement optional)
     → opportunity engine (3-layer dedup)
     → Telegram alert
 """
 import hashlib
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from database import messages_col, opportunities_col
 from models.message import MessageIn, MessageSource
@@ -37,10 +37,21 @@ async def ingest_message(
     source: MessageSource,
     telegram_message_id: Optional[int] = None,
     sender_name: Optional[str] = None,
+    pdf_info: Optional[Dict[str, Any]] = None,  # NEW: {filename, mime_type, size_bytes}
 ) -> Optional[str]:
     """
     Full ingestion pipeline for a single message.
-    Returns opportunity_id if one was created/updated, else None.
+
+    Args:
+        text: Combined message text (caption + extracted PDF/doc text).
+        message_date: ORIGINAL Telegram send timestamp — used as temporal anchor.
+        source: MessageSource enum (USERBOT / BOT / IMPORT).
+        telegram_message_id: Telegram message ID for reference.
+        sender_name: Sender display name.
+        pdf_info: Dict with filename/mime info if a document was attached.
+
+    Returns:
+        opportunity_id if one was created/updated, else None.
     """
     if not text or not text.strip():
         return None
@@ -65,6 +76,9 @@ async def ingest_message(
         "processed_at": None,
         "opportunity_id": None,
         "processing_error": None,
+        # Store attachment info on the raw message
+        "attachment_filename": pdf_info.get("filename") if pdf_info else None,
+        "attachment_mime_type": pdf_info.get("mime_type") if pdf_info else None,
     }
     result = await col.insert_one(msg_doc)
     message_id = str(result.inserted_id)
@@ -77,11 +91,18 @@ async def ingest_message(
             cached_hash=content_hash,
         )
 
+        if pdf_info and pdf_info.get("filename"):
+            extraction.source_document = pdf_info["filename"]
+
+        # Always preserve the original Telegram message timestamp
+        extraction.telegram_message_date = message_date
+
         await col.update_one(
             {"_id": result.inserted_id},
             {"$set": {
                 "category": extraction.category,
                 "is_placement_related": extraction.is_placement_related,
+                "cse_relevance_score": extraction.cse_relevance_score,
                 "processed_at": datetime.utcnow(),
             }}
         )
@@ -100,19 +121,17 @@ async def ingest_message(
             )
 
             # ── 5. Send Telegram alert ─────────────────────────────────────────
-            opp = await opportunities_col().find_one_and_update(
-                {"_id": __import__('bson').ObjectId(opportunity_id)},
-                {"$set": {}},  # no-op update to retrieve doc
-            )
-            if not opp:
-                from bson import ObjectId
-                opp = await opportunities_col().find_one({"_id": ObjectId(opportunity_id)})
+            from bson import ObjectId
+            opp = await opportunities_col().find_one({"_id": ObjectId(opportunity_id)})
 
             if opp:
-                if extraction.category == OpportunityCategory.NEEDS_REVIEW:
-                    await send_needs_review_alert(opp, opportunity_id, text)
-                else:
-                    await send_new_opportunity_alert(opp, opportunity_id)
+                try:
+                    if extraction.category == OpportunityCategory.NEEDS_REVIEW:
+                        await send_needs_review_alert(opp, opportunity_id, text)
+                    else:
+                        await send_new_opportunity_alert(opp, opportunity_id)
+                except Exception as alert_err:
+                    print(f"[Pipeline] Could not send Telegram bot alert: {alert_err}")
 
         return opportunity_id
 

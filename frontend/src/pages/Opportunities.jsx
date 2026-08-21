@@ -13,6 +13,8 @@ export default function Opportunities() {
     search: searchParams.get('search') || '',
     status: searchParams.get('status') || '',
     urgency: searchParams.get('urgency') || '',
+    days: searchParams.get('days') || '',
+    cse_only: searchParams.get('cse_only') === 'true',
   });
 
   const load = async () => {
@@ -22,6 +24,8 @@ export default function Opportunities() {
         search: filters.search || undefined,
         status: filters.status || undefined,
         urgency: filters.urgency || undefined,
+        days: filters.days || undefined,
+        cse_only: filters.cse_only || undefined,
         limit: 100
       });
       setOpportunities(data.opportunities || []);
@@ -38,6 +42,8 @@ export default function Opportunities() {
     if (filters.search) params.set('search', filters.search);
     if (filters.status) params.set('status', filters.status);
     if (filters.urgency) params.set('urgency', filters.urgency);
+    if (filters.days) params.set('days', filters.days);
+    if (filters.cse_only) params.set('cse_only', 'true');
     setSearchParams(params, { replace: true });
     
     // Debounce search slightly
@@ -94,6 +100,31 @@ export default function Opportunities() {
           <option value="APPLIED">Applied</option>
           <option value="IGNORED">Ignored</option>
         </select>
+
+        <select 
+          className="filter-select"
+          value={filters.days}
+          onChange={e => setFilters(f => ({ ...f, days: e.target.value }))}
+        >
+          <option value="">Any Date</option>
+          <option value="1">Last 24 Hours</option>
+          <option value="2">Last 2 Days</option>
+          <option value="3">Last 3 Days</option>
+          <option value="7">Last 7 Days</option>
+          <option value="10">Last 10 Days</option>
+          <option value="15">Last 15 Days</option>
+          <option value="30">Last 30 Days</option>
+        </select>
+
+        <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', cursor: 'pointer' }}>
+          <input 
+            type="checkbox" 
+            checked={filters.cse_only}
+            onChange={e => setFilters(f => ({ ...f, cse_only: e.target.checked }))}
+            style={{ accentColor: 'var(--blue)' }}
+          />
+          CSE Only
+        </label>
       </div>
 
       {loading ? (

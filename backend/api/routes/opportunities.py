@@ -4,7 +4,7 @@ api/routes/opportunities.py — CRUD routes for opportunities.
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from database import opportunities_col, events_col
 from models.opportunity import ApplicationStatus, OpportunityUpdate
@@ -43,6 +43,8 @@ async def list_opportunities(
     search: Optional[str] = None,
     category: Optional[str] = None,
     eligibility: Optional[str] = None,
+    days: Optional[int] = None,
+    cse_only: bool = False,
     limit: int = Query(50, le=200),
     skip: int = 0,
 ):
@@ -62,12 +64,19 @@ async def list_opportunities(
             {"role": {"$regex": search, "$options": "i"}},
             {"summary": {"$regex": search, "$options": "i"}},
         ]
+    
+    if days:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        query["telegram_message_date"] = {"$gte": cutoff}
+
+    if cse_only:
+        query["is_cse_relevant"] = True
 
     cursor = col.find(query, sort=[("created_at", -1)], skip=skip, limit=limit)
     results = []
     async for opp in cursor:
         opp["_id"] = str(opp["_id"])
-        for f in ["deadline", "assessment_date", "interview_date", "created_at", "updated_at"]:
+        for f in ["deadline", "assessment_date", "interview_date", "created_at", "updated_at", "telegram_message_date"]:
             if opp.get(f) and isinstance(opp[f], datetime):
                 opp[f] = opp[f].isoformat()
         opp["deadline_urgency"] = _opp_urgency(opp)
@@ -133,7 +142,7 @@ async def get_opportunity(opp_id: str):
         raise HTTPException(404, "Opportunity not found")
 
     opp["_id"] = str(opp["_id"])
-    for f in ["deadline", "assessment_date", "interview_date", "created_at", "updated_at"]:
+    for f in ["deadline", "assessment_date", "interview_date", "created_at", "updated_at", "telegram_message_date"]:
         if opp.get(f) and isinstance(opp[f], datetime):
             opp[f] = opp[f].isoformat()
     opp["deadline_urgency"] = _opp_urgency(opp)

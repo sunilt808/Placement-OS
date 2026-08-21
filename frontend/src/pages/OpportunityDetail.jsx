@@ -137,6 +137,20 @@ export default function OpportunityDetail() {
             <div style={{ fontWeight: 500 }}>{opp.cgpa_requirement || 'Not specified'}</div>
           </div>
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginTop: 24 }}>
+          <div>
+            <div className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Source Document</div>
+            <div style={{ fontWeight: 500 }}>{opp.source_document ? `📄 ${opp.source_document}` : 'None'}</div>
+          </div>
+          <div>
+            <div className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Source Telegram</div>
+            <div style={{ fontWeight: 500 }}>{opp.telegram_message_date ? `📨 ${fmt(opp.telegram_message_date)}` : 'Unknown'}</div>
+          </div>
+          <div>
+            <div className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>Required Skills</div>
+            <div style={{ fontWeight: 500 }}>{opp.skills?.join(', ') || 'Not specified'}</div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
@@ -146,6 +160,29 @@ export default function OpportunityDetail() {
           <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             Confidence: {Math.round(opp.confidence * 100)}%
           </div>
+          
+          <div className="divider" />
+          
+          <h3 style={{ fontSize: '1.1rem', marginBottom: 16 }}>CSE Intelligence</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: opp.is_cse_relevant ? 'var(--green)' : 'var(--red)' }}>
+              {opp.cse_relevance_score !== undefined ? opp.cse_relevance_score : 0}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600 }}>{opp.is_cse_relevant ? 'CSE Relevant' : 'Not CSE Relevant'}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Relevance Score (0-100)</div>
+            </div>
+          </div>
+          {opp.jd_cse_signals && opp.jd_cse_signals.length > 0 && (
+            <div>
+              <div className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 8 }}>Signals Found in JD</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {opp.jd_cse_signals.map(s => (
+                  <span key={s} className="meta-chip branch">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
           
           <div className="divider" />
           

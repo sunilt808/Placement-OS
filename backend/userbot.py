@@ -7,6 +7,7 @@ and sends incoming text messages to the ingestion pipeline.
 
 import asyncio
 from datetime import datetime
+from typing import Optional
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -26,45 +27,50 @@ IST = pytz.timezone("Asia/Kolkata")
 _client: TelegramClient | None = None
 
 
-async def _scan_recent_history():
-    """Scan recent messages on startup to catch up on missed placement posts."""
+async def _scan_recent_history(days: Optional[int] = None):
+    """Scan recent messages to catch up on missed placement posts."""
     from datetime import timedelta
     
     if not settings.placement_group_id or not _client:
         return
         
-    days = settings.catchup_days
-    offset_date = datetime.now(IST) - timedelta(days=days)
+    if days is None:
+        # Get dynamic catchup_days from DB
+        from database import app_settings_col
+        col = app_settings_col()
+        sys_conf = await col.find_one({"key": "system_config"})
+        days = sys_conf.get("catchup_days", settings.catchup_days) if sys_conf else settings.catchup_days
     
-    print(f"[Userbot] Scanning last {days} days of history for missed posts...")
+    limit_date = datetime.now(IST) - timedelta(days=days)
+    
+    print(f"[Userbot] Scanning last {days} days of history for missed posts (Newest first)...")
     
     count = 0
     try:
-        # iter_messages goes backwards in time, we'll just process them
-        async for message in _client.iter_messages(
-            settings.placement_group_id, 
-            offset_date=offset_date,
-            reverse=True # process older to newer
-        ):
+        # iter_messages defaults to newest first
+        async for message in _client.iter_messages(settings.placement_group_id):
+            message_date = message.date
+            if message_date.tzinfo is None:
+                message_date = IST.localize(message_date)
+                
+            if message_date < limit_date:
+                break
+                
             # Only process if it has text or document
             text = message.message or ""
             
             # Check for PDF
-            pdf_text = None
+            pdf_info = None
             if message.media and getattr(message.media, "document", None):
-                pdf_text = await download_and_extract_pdf(_client, message)
+                pdf_info = await download_and_extract_pdf(_client, message)
                 
-            if pdf_text:
-                text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_text}".strip()
+            if pdf_info:
+                text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_info['text']}".strip()
                 
             if not text.strip():
                 continue
                 
             count += 1
-            
-            message_date = message.date
-            if message_date.tzinfo is None:
-                message_date = IST.localize(message_date)
                 
             sender_name = ""
             try:
@@ -74,17 +80,17 @@ async def _scan_recent_history():
             except Exception:
                 pass
                 
-            # Send to pipeline (hash dedup will automatically skip already processed ones)
             await ingest_message(
                 text=text,
                 message_date=message_date,
                 source=MessageSource.USERBOT,
                 telegram_message_id=message.id,
                 sender_name=sender_name,
+                pdf_info=pdf_info,
             )
             
-            # Sleep slightly to avoid flooding API
-            await asyncio.sleep(0.5)
+            # Sleep slightly to stay well within free tier Gemini rate limits (5 RPM)
+            await asyncio.sleep(3.0)
             
     except Exception as e:
         print(f"[Userbot] Error during historical scan: {e}")
@@ -237,14 +243,14 @@ async def start_userbot():
                 # Ignore media-only messages without extractable text
                 # ---------------------------------------------
 
-                pdf_text = None
+                pdf_info = None
                 if event.message.media and getattr(event.message.media, "document", None):
                     print("[Userbot] Document detected, attempting PDF extraction...")
-                    pdf_text = await download_and_extract_pdf(_client, event.message)
+                    pdf_info = await download_and_extract_pdf(_client, event.message)
                     
-                if pdf_text:
-                    text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_text}".strip()
-                    print(f"[Userbot] Successfully extracted {len(pdf_text)} characters from PDF.")
+                if pdf_info:
+                    text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_info['text']}".strip()
+                    print(f"[Userbot] Successfully extracted {len(pdf_info['text'])} characters from PDF.")
 
                 if not text.strip():
                     print(
@@ -264,6 +270,7 @@ async def start_userbot():
                     source=MessageSource.USERBOT,
                     telegram_message_id=message_id,
                     sender_name=sender_name,
+                    pdf_info=pdf_info,
                 )
 
                 print(
@@ -310,6 +317,11 @@ def get_userbot_client() -> TelegramClient | None:
     """Return the active Telethon client."""
 
     return _client
+
+
+async def trigger_manual_history_scan(days: int):
+    """Trigger a manual background history scan for the last X days."""
+    asyncio.create_task(_scan_recent_history(days=days))
 
 
 if __name__ == "__main__":

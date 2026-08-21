@@ -34,11 +34,11 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Kolkata"
     watchdog_interval_minutes: int = 30
     daily_summary_hour: int = 8
-    catchup_days: int = 30
+    catchup_days: int = 10
 
     # ── Gemini model names ────────────────────────────────────────────────────
-    gemini_flash_model: str = "gemini-1.5-flash"
-    gemini_pro_model: str = "gemini-1.5-pro"
+    gemini_flash_model: str = "gemini-3.6-flash"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
 
     # Confidence threshold below which we escalate to the pro model
     confidence_threshold: float = 0.70

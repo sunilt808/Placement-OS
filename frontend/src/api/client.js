@@ -43,6 +43,12 @@ export const getProfile = () =>
 export const saveProfile = (profile) =>
   api.post('/api/settings/profile', profile).then(r => r.data);
 
+export const getSystemConfig = () =>
+  api.get('/api/settings/system_config').then(r => r.data);
+
+export const saveSystemConfig = (config) =>
+  api.post('/api/settings/system_config', config).then(r => r.data);
+
 export const getSystemStatus = () =>
   api.get('/api/settings/system').then(r => r.data);
 

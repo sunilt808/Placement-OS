@@ -135,6 +135,11 @@ async def _create_opportunity(extraction: AIExtraction, message_id: str) -> str:
         "source_message_ids": [message_id],
         "created_at": now,
         "updated_at": now,
+        "cse_relevance_score": extraction.cse_relevance_score,
+        "is_cse_relevant": extraction.is_cse_relevant,
+        "jd_cse_signals": extraction.jd_cse_signals,
+        "source_document": extraction.source_document,
+        "telegram_message_date": extraction.telegram_message_date,
     }
     result = await col.insert_one(doc)
     opp_id = str(result.inserted_id)
@@ -189,10 +194,16 @@ async def _update_opportunity(opp: dict, extraction: AIExtraction, message_id: s
 
     # ── Update other fields if they improve existing data ─────────────────────
     for field in ["ctc", "location", "registration_link", "assessment_date",
-                  "interview_date", "summary"]:
+                  "interview_date", "summary", "source_document", "telegram_message_date"]:
         new_val = getattr(extraction, field, None)
         if new_val and not opp.get(field):
             updates[field] = new_val
+
+    if getattr(extraction, "cse_relevance_score", 0) > opp.get("cse_relevance_score", 0):
+        updates["cse_relevance_score"] = extraction.cse_relevance_score
+        updates["is_cse_relevant"] = extraction.is_cse_relevant
+        if extraction.jd_cse_signals:
+            updates["jd_cse_signals"] = extraction.jd_cse_signals
 
     # ── Update confidence if improved ─────────────────────────────────────────
     if extraction.confidence > opp.get("confidence", 0):
@@ -243,8 +254,15 @@ async def process_extraction(
     Returns opportunity_id or None.
     """
     if not extraction.is_placement_related:
+        print("[Opportunity] Skipped — not a relevant placement (or extraction failed)")
         return None
     if extraction.category == OpportunityCategory.IRRELEVANT:
+        print("[Opportunity] Skipped — category IRRELEVANT")
+        return None
+
+    # Data Quality Rule: Require at least company OR role
+    if not extraction.company and not extraction.role:
+        print("[Opportunity] Skipped — insufficient data (missing both company and role)")
         return None
 
     # Layer 1: Signature match

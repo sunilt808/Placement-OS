@@ -102,8 +102,21 @@ export default function OpportunityCard({ opp, onStatusChange }) {
             {opp.location}
           </span>
         )}
+        {opp.source_document && (
+          <span className="meta-chip">
+            📄 {opp.source_document}
+          </span>
+        )}
+        {opp.telegram_message_date && (
+          <span className="meta-chip">
+            📨 {formatDeadline(opp.telegram_message_date)}
+          </span>
+        )}
         {opp.eligible_branches?.slice(0, 2).map(b => (
           <span key={b} className="meta-chip branch">{b}</span>
+        ))}
+        {opp.skills?.slice(0, 3).map(s => (
+          <span key={s} className="meta-chip branch">{s}</span>
         ))}
         {opp.cgpa_requirement && (
           <span className="meta-chip">CGPA {opp.cgpa_requirement}</span>
@@ -131,7 +144,14 @@ export default function OpportunityCard({ opp, onStatusChange }) {
 
       {/* Urgency + confidence row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <UrgencyBadge urgency={urgency} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UrgencyBadge urgency={urgency} />
+          {opp.cse_relevance_score !== undefined && (
+            <span className={`badge ${opp.is_cse_relevant ? 'badge-applied' : 'badge-not-applied'}`}>
+              {opp.is_cse_relevant ? `✅ CSE Relevant — ${opp.cse_relevance_score}%` : `❌ Not CSE`}
+            </span>
+          )}
+        </div>
         <span className="confidence">AI: {confidence}%</span>
       </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getProfile, saveProfile, getSystemStatus } from '../api/client';
+import { getProfile, saveProfile, getSystemStatus, getSystemConfig, saveSystemConfig } from '../api/client';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
@@ -11,6 +11,7 @@ export default function Settings() {
     preferred_locations: '',
     preferred_roles: ''
   });
+  const [systemConfig, setSystemConfig] = useState({ catchup_days: 30 });
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -26,6 +27,9 @@ export default function Settings() {
         });
       }
     });
+    getSystemConfig().then(c => {
+      if (c) setSystemConfig(c);
+    });
     getSystemStatus().then(setStatus);
   }, []);
 
@@ -40,9 +44,10 @@ export default function Settings() {
         preferred_locations: profile.preferred_locations.split(',').map(s => s.trim()).filter(Boolean),
         preferred_roles: profile.preferred_roles.split(',').map(s => s.trim()).filter(Boolean)
       });
-      toast.success('Profile saved');
+      await saveSystemConfig({ catchup_days: parseInt(systemConfig.catchup_days) || 30 });
+      toast.success('Settings saved');
     } catch (e) {
-      toast.error('Failed to save profile');
+      toast.error('Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -73,6 +78,29 @@ export default function Settings() {
                 : 'No messages received yet'}
             </div>
           </div>
+        </div>
+
+        <div style={{ marginTop: 24, padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 6 }}>
+            History Scan Range
+          </label>
+          <select 
+            className="search-input" 
+            style={{ width: '100%', maxWidth: 200 }}
+            value={systemConfig.catchup_days}
+            onChange={e => setSystemConfig(c => ({ ...c, catchup_days: e.target.value }))}
+          >
+            <option value="30">1 Month</option>
+            <option value="15">15 Days</option>
+            <option value="10">10 Days</option>
+            <option value="7">7 Days</option>
+            <option value="3">3 Days</option>
+            <option value="2">2 Days</option>
+            <option value="1">1 Day</option>
+          </select>
+          <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: 8 }}>
+            How far back to scan Telegram history when the backend starts up.
+          </p>
         </div>
       </div>
 

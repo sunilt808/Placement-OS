@@ -61,6 +61,13 @@ class AIExtraction(BaseModel):
     summary: Optional[str] = None
     confidence: float = 0.0
 
+    # ── NEW: CSE Intelligence Fields ─────────────────────────────────────────
+    cse_relevance_score: int = 0          # 0–100: how relevant is this to CSE
+    is_cse_relevant: bool = False         # True if score >= 50
+    jd_cse_signals: Optional[List[str]] = None  # matched CSE tech keywords from JD
+    source_document: Optional[str] = None       # e.g. "Accenture_JD.pdf"
+    telegram_message_date: Optional[datetime] = None  # original Telegram send time
+
 
 class OpportunityCreate(BaseModel):
     company: Optional[str] = None
@@ -82,6 +89,13 @@ class OpportunityCreate(BaseModel):
     summary: Optional[str] = None
     category: OpportunityCategory = OpportunityCategory.PLACEMENT_OPPORTUNITY
     source_message_ids: List[str] = Field(default_factory=list)
+
+    # ── NEW fields ────────────────────────────────────────────────────────────
+    cse_relevance_score: int = 0
+    is_cse_relevant: bool = False
+    jd_cse_signals: Optional[List[str]] = None
+    source_document: Optional[str] = None
+    telegram_message_date: Optional[datetime] = None
 
 
 class OpportunityUpdate(BaseModel):
