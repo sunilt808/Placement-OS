@@ -5,6 +5,7 @@ import OpportunityCard from '../components/OpportunityCard';
 export default function Applications() {
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showExpired, setShowExpired] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -26,9 +27,18 @@ export default function Applications() {
 
   return (
     <div className="page-container fade-in">
-      <div className="page-header">
-        <h1 className="page-title">Applied Opportunities</h1>
-        <p className="page-subtitle">Track jobs you have successfully applied for.</p>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="page-title">Applied Opportunities</h1>
+          <p className="page-subtitle">Track jobs you have successfully applied for.</p>
+        </div>
+        <button 
+          className="btn btn-ghost" 
+          onClick={() => setShowExpired(!showExpired)}
+          style={{ background: 'var(--bg-tertiary)', fontSize: '0.8rem' }}
+        >
+          {showExpired ? 'Hide' : 'Show'} Expired Applications
+        </button>
       </div>
 
       {loading ? (
@@ -36,7 +46,7 @@ export default function Applications() {
       ) : (
         <>
           <div className="opp-grid">
-            {opportunities.map(opp => (
+            {opportunities.filter(o => showExpired || o.deadline_urgency !== 'EXPIRED').map(opp => (
               <OpportunityCard
                 key={opp._id}
                 opp={opp}

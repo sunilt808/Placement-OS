@@ -1,92 +1,60 @@
-/**
- * components/Navbar.jsx — Left sidebar navigation
- */
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import {
-  LayoutDashboard, Briefcase, Upload, Bell, CheckCircle2,
-  Settings, LogOut, CalendarDays
-} from 'lucide-react';
-import { getStats, getHealth } from '../api/client';
-import { useAuth } from '../hooks/useAuth';
+import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert } from 'lucide-react';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/opportunities', icon: Briefcase, label: 'Opportunities' },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
-  { to: '/applications', icon: CheckCircle2, label: 'Applications' },
-  { to: '/reminders', icon: Bell, label: 'Reminders' },
-  { to: '/import', icon: Upload, label: 'Import' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+const NAV_LINKS = [
+  { path: '/', label: 'Command Center', icon: LayoutDashboard },
+  { path: '/opportunities', label: 'All Opportunities', icon: Briefcase },
+  { path: '/applications', label: 'My Applications', icon: CheckSquare },
+  { path: '/calendar', label: 'Calendar View', icon: CalendarIcon },
+];
+
+const SYS_LINKS = [
+  { path: '/reminders', label: 'Reminders', icon: ShieldAlert },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Navbar() {
-  const [stats, setStats] = useState({});
-  const [health, setHealth] = useState({ userbot_running: false });
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const s = await getStats();
-        setStats(s);
-      } catch {}
-      try {
-        const h = await getHealth();
-        setHealth(h);
-      } catch {}
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
   return (
-    <aside className="sidebar">
+    <nav className="sidebar">
       <div className="sidebar-brand">
-        <h1>🎯 AI Placement<br />Monitor</h1>
-        <p>Placement Control Center</p>
+        <h1 style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.05em' }}>Placement Assistant</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>AI Tracker System v2.0</p>
       </div>
-
-      <nav className="sidebar-nav">
-        <div className="nav-section-label">Navigation</div>
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
+      
+      <div className="sidebar-nav">
+        <div className="nav-section-label">Main Navigation</div>
+        {NAV_LINKS.map(link => (
+          <NavLink 
+            key={link.path} 
+            to={link.path} 
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            end={link.path === '/'}
           >
-            <Icon size={16} />
-            {label}
-            {label === 'Opportunities' && stats.not_applied > 0 && (
-              <span className="nav-badge">{stats.not_applied}</span>
-            )}
-            {label === 'Dashboard' && stats.deadline_today > 0 && (
-              <span className="nav-badge">{stats.deadline_today}</span>
-            )}
+            <link.icon className="nav-icon" size={18} />
+            {link.label}
           </NavLink>
         ))}
-      </nav>
 
-      <div className="sidebar-footer">
-        <button onClick={handleLogout} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--text-secondary)' }}>
-          <LogOut size={16} />
-          Logout
+        <div className="nav-section-label" style={{ marginTop: 'auto' }}>System</div>
+        {SYS_LINKS.map(link => (
+          <NavLink 
+            key={link.path} 
+            to={link.path} 
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+          >
+            <link.icon className="nav-icon" size={18} />
+            {link.label}
+          </NavLink>
+        ))}
+        
+        <button className="nav-item" style={{ 
+          border: 'none', width: '100%', background: 'transparent', 
+          textAlign: 'left', cursor: 'pointer', marginTop: 8 
+        }} onClick={() => window.location.reload()}>
+          <LogOut className="nav-icon" size={18} />
+          Sign Out
         </button>
-        <div className="system-status" style={{ marginTop: 8 }}>
-          <div className={`status-dot ${health.userbot_running ? 'online' : 'offline'}`} />
-          <span>
-            {health.userbot_running ? 'Listening live' : 'Userbot offline'}
-          </span>
-        </div>
       </div>
-    </aside>
+    </nav>
   );
 }

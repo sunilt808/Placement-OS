@@ -1,50 +1,53 @@
-/**
- * pages/Dashboard.jsx — PLACEMENT CONTROL CENTER
- * Primary question: "What do I need to apply for RIGHT NOW?"
- */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStats, getOpportunities } from '../api/client';
 import api from '../api/client';
 import OpportunityCard from '../components/OpportunityCard';
-import { Briefcase, CheckCircle, Clock, AlertTriangle, Sparkles } from 'lucide-react';
+import { Sparkles, BarChart2, Bell, CheckCircle, Clock } from 'lucide-react';
 
 const URGENCY_SECTIONS = [
   {
     key: 'red',
     urgencies: ['TODAY', 'WITHIN_24H'],
-    label: '🔴 DEADLINE TODAY / WITHIN 24H',
+    label: 'CRITICAL: Due Today',
     color: 'red',
-    empty: 'No urgent deadlines right now!',
+    empty: '',
   },
   {
     key: 'orange',
     urgencies: ['TOMORROW'],
-    label: '🟠 DEADLINE TOMORROW',
+    label: 'URGENT: Due Tomorrow',
     color: 'orange',
-    empty: 'Nothing due tomorrow.',
+    empty: '',
   },
   {
     key: 'yellow',
     urgencies: ['WITHIN_3_DAYS', 'THIS_WEEK'],
-    label: '🟡 THIS WEEK',
+    label: 'ACTION REQUIRED: This Week',
     color: 'yellow',
-    empty: 'Nothing this week.',
+    empty: '',
   },
   {
     key: 'green',
     urgencies: ['UPCOMING'],
-    label: '🟢 UPCOMING',
+    label: 'UPCOMING',
     color: 'green',
-    empty: 'No upcoming opportunities.',
+    empty: '',
   },
   {
     key: 'gray',
     urgencies: ['NO_DEADLINE'],
-    label: '⚪ NO DEADLINE SET',
+    label: 'NO DEADLINE SET',
     color: 'gray',
     empty: '',
   },
+  {
+    key: 'expired',
+    urgencies: ['EXPIRED'],
+    label: 'EXPIRED & MISSED',
+    color: 'gray',
+    empty: '',
+  }
 ];
 
 export default function Dashboard() {
@@ -54,6 +57,7 @@ export default function Dashboard() {
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showOnlyEligible, setShowOnlyEligible] = useState(false);
+  const [showExpired, setShowExpired] = useState(false);
 
   const load = async () => {
     try {
@@ -98,7 +102,7 @@ export default function Dashboard() {
       <div className="page-container">
         <div className="loading">
           <div className="spinner" />
-          <span>Loading placement data...</span>
+          <span>Syncing Command Center...</span>
         </div>
       </div>
     );
@@ -106,135 +110,171 @@ export default function Dashboard() {
 
   return (
     <div className="page-container fade-in">
-      {/* Hero */}
-      <div className="page-header">
-        <div style={{
-          display: 'inline-block',
-          background: 'var(--red-soft)',
-          border: '1px solid var(--red-border)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '6px 14px',
-          fontSize: '0.72rem',
-          fontWeight: 700,
-          color: 'var(--red)',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          marginBottom: 12,
-        }}>
-          Placement Control Center
-        </div>
-        <h1 className="page-title" style={{ fontSize: '2.2rem' }}>
-          {briefing ? briefing.greeting : 'Welcome back'}, Sunil!<br />
-          <span style={{ fontSize: '1.4rem', color: 'var(--text-secondary)' }}>
-            What do you need to <span style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>apply for RIGHT NOW?</span>
-          </span>
-        </h1>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <p className="page-subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--blue)' }}>
-            <Sparkles size={16} /> {briefing ? briefing.message : 'AI-monitored placements · Never miss an opportunity'}
-          </p>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
-            <input 
-              type="checkbox" 
-              checked={showOnlyEligible} 
-              onChange={e => setShowOnlyEligible(e.target.checked)} 
-              style={{ width: 16, height: 16 }}
-            />
-            Show only CSE-Eligible
-          </label>
+      {/* ── Premium Hero Section ── */}
+      <div className="page-header" style={{ position: 'relative', overflow: 'hidden' }}>
+        
+        {/* Animated Background Glows */}
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'var(--blue)', filter: 'blur(100px)', opacity: 0.15, borderRadius: '50%' }} />
+        <div style={{ position: 'absolute', bottom: -50, left: 100, width: 300, height: 100, background: 'var(--purple)', filter: 'blur(100px)', opacity: 0.15, borderRadius: '50%' }} />
+
+        <div style={{ position: 'relative', zIndex: 10 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'var(--bg-tertiary)', border: '1px solid var(--border-glow)',
+            borderRadius: '99px', padding: '6px 16px', fontSize: '0.75rem',
+            fontWeight: 700, color: 'var(--text-accent)', letterSpacing: '0.15em',
+            textTransform: 'uppercase', marginBottom: 20, boxShadow: 'var(--shadow-sm)'
+          }}>
+            <Sparkles size={14} style={{ color: 'var(--blue-bright)' }} /> Placement Intelligence Active
+          </div>
+          
+          <h1 className="page-title" style={{ fontSize: '3.5rem', letterSpacing: '-0.03em', marginBottom: 12 }}>
+            {briefing ? briefing.greeting : 'Welcome back'}, <span style={{ color: 'white' }}>Sunil.</span>
+          </h1>
+          <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '1.4rem', fontWeight: 400, color: 'var(--text-secondary)', marginBottom: 24 }}>
+            What do you need to <span style={{ background: 'var(--gradient-primary)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>apply for right now?</span>
+          </h2>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+            <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--blue-bright)', fontWeight: 600, fontSize: '0.9rem', background: 'var(--blue-soft)', padding: '8px 16px', borderRadius: '99px' }}>
+              <Bell size={16} /> {briefing ? briefing.message : 'AI is monitoring new drives.'}
+            </p>
+
+            <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer', fontWeight: 700, background: 'var(--bg-card)', padding: '8px 16px', borderRadius: '99px', border: '1px solid var(--border)' }}>
+              <input 
+                type="checkbox" 
+                checked={showOnlyEligible} 
+                onChange={e => setShowOnlyEligible(e.target.checked)} 
+                style={{ width: 16, height: 16, accentColor: 'var(--emerald-bright)' }}
+              />
+              Show only CSE-Eligible
+            </label>
+          </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* ── Glassmorphism Stat Grid ── */}
       {stats && (
         <div className="stat-grid">
-          <div className="stat-card danger" onClick={() => navigate('/opportunities?urgency=TODAY')}>
-            <div className="stat-value">{stats.deadline_today || 0}</div>
-            <div className="stat-label">Deadline Today</div>
+          <div className="stat-card">
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--blue-bright)' }}>{briefing?.new_since_yesterday || 0}</div>
+              <div className="stat-label">New Opportunities</div>
+            </div>
+            <div className="stat-icon blue"><Sparkles size={24} /></div>
           </div>
-          <div className="stat-card warning" onClick={() => navigate('/opportunities?urgency=TOMORROW')}>
-            <div className="stat-value">{stats.deadline_tomorrow || 0}</div>
-            <div className="stat-label">Tomorrow</div>
+          
+          <div className="stat-card">
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--orange)' }}>{(stats.deadline_today || 0) + (stats.deadline_tomorrow || 0)}</div>
+              <div className="stat-label">Urgent Deadlines</div>
+            </div>
+            <div className="stat-icon orange"><Clock size={24} /></div>
           </div>
-          <div className="stat-card caution" onClick={() => navigate('/opportunities?urgency=THIS_WEEK')}>
-            <div className="stat-value">{(stats.within_3_days || 0) + (stats.this_week || 0)}</div>
-            <div className="stat-label">This Week</div>
+          
+          <div className="stat-card">
+            <div className="stat-info">
+              <div className="stat-value">{stats.active}</div>
+              <div className="stat-label">Total Active</div>
+            </div>
+            <div className="stat-icon purple"><BarChart2 size={24} /></div>
           </div>
-          <div className="stat-card info" onClick={() => navigate('/opportunities')}>
-            <div className="stat-value">{stats.not_applied || 0}</div>
-            <div className="stat-label">Not Applied</div>
-          </div>
-          <div className="stat-card success" onClick={() => navigate('/applications')}>
-            <div className="stat-value">{stats.applied || 0}</div>
-            <div className="stat-label">Applied</div>
-          </div>
-          <div className="stat-card neutral">
-            <div className="stat-value">{stats.active || 0}</div>
-            <div className="stat-label">Total Active</div>
+          
+          <div className="stat-card">
+            <div className="stat-info">
+              <div className="stat-value" style={{ color: 'var(--emerald-bright)' }}>{stats.applied}</div>
+              <div className="stat-label">Applications Sent</div>
+            </div>
+            <div className="stat-icon green"><CheckCircle size={24} /></div>
           </div>
         </div>
       )}
 
-      {/* Urgency Sections */}
-      {URGENCY_SECTIONS.map(section => {
-        const sectionOpps = getSection(section.urgencies);
-        if (sectionOpps.length === 0) return null;
+      {/* ── Dynamic Urgency Sections ── */}
+      <div>
+        {URGENCY_SECTIONS.map(section => {
+          const sectionOpps = getSection(section.urgencies);
+          if (!sectionOpps.length) return null;
+          
+          if (section.key === 'expired') {
+            return (
+              <div key="expired-section" className="urgency-section fade-in" style={{ marginTop: 60, opacity: 0.8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+                  <button 
+                    className="btn btn-ghost" 
+                    onClick={() => setShowExpired(!showExpired)}
+                    style={{ background: 'var(--bg-tertiary)' }}
+                  >
+                    {showExpired ? 'Hide' : 'Show'} {sectionOpps.length} Expired / Missed Opportunities
+                  </button>
+                </div>
+                
+                {showExpired && (
+                  <>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 16,
+                      marginBottom: 24, position: 'relative'
+                    }}>
+                      <div className={`urgency-indicator ${section.color}`} style={{ width: 12, height: 12 }} />
+                      <h3 className={`urgency-title ${section.color}`}>{section.label}</h3>
+                      <span className="urgency-count">{sectionOpps.length} missed</span>
+                      <div style={{
+                        flex: 1, height: 1,
+                        background: `linear-gradient(90deg, var(--${section.color}-glow) 0%, transparent 100%)`
+                      }} />
+                    </div>
+                    <div className="opp-grid">
+                      {sectionOpps.map(opp => (
+                        <OpportunityCard
+                          key={opp._id}
+                          opp={opp}
+                          onStatusChange={handleStatusChange}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          }
 
-        return (
-          <div className="urgency-section" key={section.key}>
-            <div className="urgency-header">
-              <div className={`urgency-indicator ${section.color}`} />
-              <span className={`urgency-title ${section.color}`}>{section.label}</span>
-              <span className="urgency-count">({sectionOpps.length})</span>
+          return (
+            <div key={section.key} className="urgency-section fade-in">
+              {/* Premium Gradient Divider Header */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                marginBottom: 24, position: 'relative'
+              }}>
+                <div className={`urgency-indicator ${section.color}`} style={{ width: 12, height: 12 }} />
+                <h3 className={`urgency-title ${section.color}`}>{section.label}</h3>
+                <span className="urgency-count">{sectionOpps.length} pending</span>
+                <div style={{
+                  flex: 1, height: 1,
+                  background: `linear-gradient(90deg, var(--${section.color}-glow) 0%, transparent 100%)`
+                }} />
+              </div>
+
+              <div className="opp-grid">
+                {sectionOpps.map(opp => (
+                  <OpportunityCard
+                    key={opp._id}
+                    opp={opp}
+                    onStatusChange={handleStatusChange}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="opp-grid">
-              {sectionOpps.map(opp => (
-                <OpportunityCard
-                  key={opp._id}
-                  opp={opp}
-                  onStatusChange={handleStatusChange}
-                />
-              ))}
-            </div>
+          );
+        })}
+
+        {activeOpps.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-card)', borderRadius: 'var(--radius-xl)', border: '1px dashed var(--border)' }}>
+            <CheckCircle size={48} style={{ color: 'var(--emerald)', opacity: 0.5, margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>You're all caught up!</h3>
+            <p style={{ color: 'var(--text-muted)' }}>No active opportunities match your current filters.</p>
           </div>
-        );
-      })}
-
-      {/* Expired / Missed */}
-      {(() => {
-        const expired = opportunities.filter(o =>
-          o.deadline_urgency === 'EXPIRED' &&
-          !['APPLIED', 'IGNORED'].includes(o.status)
-        );
-        if (!expired.length) return null;
-        return (
-          <div className="urgency-section">
-            <div className="urgency-header">
-              <div className="urgency-indicator gray" />
-              <span className="urgency-title gray">⚫ POSSIBLE MISSED OPPORTUNITIES</span>
-              <span className="urgency-count">({expired.length})</span>
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-              Deadline has passed. Not marked as applied — may have been missed.
-            </p>
-            <div className="opp-grid">
-              {expired.map(opp => (
-                <OpportunityCard key={opp._id} opp={opp} onStatusChange={handleStatusChange} />
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* All clear */}
-      {activeOpps.length === 0 && (
-        <div className="empty-state">
-          <div style={{ fontSize: '4rem' }}>🎉</div>
-          <h3>All clear!</h3>
-          <p>No pending placement opportunities right now.<br />
-            Forward messages to your bot or import your Telegram history to get started.</p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
