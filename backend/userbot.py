@@ -1,25 +1,13 @@
 """
-userbot.py — Telethon personal-account listener (PRIMARY ingestion path).
+userbot.py — Telethon personal-account listener.
 
-This is Phase 0 / the core architectural fix from the revised plan.
-Logs into the student's own Telegram account (not a bot) and silently
-listens to every new message in the placement group in real-time.
-
-No bot needs to be added to the group.
-No manual forwarding needed.
-Every message the student's account can see, the pipeline can see.
-
-SECURITY:
-- api_id, api_hash, and session_string are environment variables only.
-- This is strictly READ-ONLY — never sends, joins, or modifies anything.
-- Session string stored in .env; never committed to git.
-
-USAGE:
-  python userbot.py          # Start the listener standalone
-  Or managed by scheduler.py / main.py lifespan.
+Listens to the configured Telegram placement group in real time
+and sends incoming text messages to the ingestion pipeline.
 """
+
 import asyncio
 from datetime import datetime
+
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 import pytz
@@ -27,90 +15,300 @@ import pytz
 from config import settings
 from models.message import MessageSource
 from services.message_pipeline import ingest_message
-from services.watchdog import record_message_received, set_userbot_running
+from services.watchdog import (
+    record_message_received,
+    set_userbot_running,
+)
+from services.pdf_service import download_and_extract_pdf
 
 IST = pytz.timezone("Asia/Kolkata")
 
 _client: TelegramClient | None = None
 
 
+async def _scan_recent_history():
+    """Scan recent messages on startup to catch up on missed placement posts."""
+    from datetime import timedelta
+    
+    if not settings.placement_group_id or not _client:
+        return
+        
+    days = settings.catchup_days
+    offset_date = datetime.now(IST) - timedelta(days=days)
+    
+    print(f"[Userbot] Scanning last {days} days of history for missed posts...")
+    
+    count = 0
+    try:
+        # iter_messages goes backwards in time, we'll just process them
+        async for message in _client.iter_messages(
+            settings.placement_group_id, 
+            offset_date=offset_date,
+            reverse=True # process older to newer
+        ):
+            # Only process if it has text or document
+            text = message.message or ""
+            
+            # Check for PDF
+            pdf_text = None
+            if message.media and getattr(message.media, "document", None):
+                pdf_text = await download_and_extract_pdf(_client, message)
+                
+            if pdf_text:
+                text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_text}".strip()
+                
+            if not text.strip():
+                continue
+                
+            count += 1
+            
+            message_date = message.date
+            if message_date.tzinfo is None:
+                message_date = IST.localize(message_date)
+                
+            sender_name = ""
+            try:
+                sender = await message.get_sender()
+                if sender:
+                    sender_name = getattr(sender, "first_name", "") or ""
+            except Exception:
+                pass
+                
+            # Send to pipeline (hash dedup will automatically skip already processed ones)
+            await ingest_message(
+                text=text,
+                message_date=message_date,
+                source=MessageSource.USERBOT,
+                telegram_message_id=message.id,
+                sender_name=sender_name,
+            )
+            
+            # Sleep slightly to avoid flooding API
+            await asyncio.sleep(0.5)
+            
+    except Exception as e:
+        print(f"[Userbot] Error during historical scan: {e}")
+        
+    print(f"[Userbot] Historical scan complete. Processed {count} messages.")
+
 async def start_userbot():
     """Initialize and start the Telethon userbot listener."""
+
     global _client
 
+    # ---------------------------------------------------------
+    # 1. Check Telegram API credentials
+    # ---------------------------------------------------------
+
     if not settings.telegram_api_id or not settings.telegram_api_hash:
-        print("[Userbot] No API credentials found — skipping userbot. "
-              "Set TELEGRAM_API_ID and TELEGRAM_API_HASH in .env")
-        print("[Userbot] Run setup_session.py to generate TELEGRAM_SESSION_STRING")
+        print(
+            "[Userbot] No API credentials found — skipping userbot.\n"
+            "[Userbot] Set TELEGRAM_API_ID and TELEGRAM_API_HASH in .env"
+        )
         return
+
+    # ---------------------------------------------------------
+    # 2. Check session string
+    # ---------------------------------------------------------
 
     if not settings.telegram_session_string:
-        print("[Userbot] No session string found. Run: python setup_session.py")
+        print(
+            "[Userbot] No session string found.\n"
+            "[Userbot] Run: python setup_session.py"
+        )
         return
 
+    # ---------------------------------------------------------
+    # 3. Check placement group ID
+    # ---------------------------------------------------------
+
     if not settings.placement_group_id:
-        print("[Userbot] PLACEMENT_GROUP_ID not set in .env — userbot won't know which group to watch")
+        print(
+            "[Userbot] ERROR: PLACEMENT_GROUP_ID is not set in .env"
+        )
+        return
+
+    print(
+        f"[Userbot] Target placement group ID: "
+        f"{settings.placement_group_id}"
+    )
 
     try:
+        # -----------------------------------------------------
+        # 4. Create Telegram client
+        # -----------------------------------------------------
+
         _client = TelegramClient(
             StringSession(settings.telegram_session_string),
             settings.telegram_api_id,
             settings.telegram_api_hash,
         )
 
-        await _client.start()
-        set_userbot_running(True)
-        print("[Userbot] ✅ Telethon session connected. Listening for placement messages...")
+        # -----------------------------------------------------
+        # 5. Connect existing session
+        # -----------------------------------------------------
 
-        @_client.on(events.NewMessage(chats=settings.placement_group_id))
+        await _client.start()
+
+        set_userbot_running(True)
+
+        print("[Userbot] Telethon session connected.")
+        print(
+            f"[Userbot] Listening to group ID: "
+            f"{settings.placement_group_id}"
+        )
+        
+        # -----------------------------------------------------
+        # 5.5. Scan history
+        # -----------------------------------------------------
+        await _scan_recent_history()
+
+        print("[Userbot] Waiting for new Telegram messages...")
+
+        # -----------------------------------------------------
+        # 6. Register new-message handler
+        # -----------------------------------------------------
+
+        @_client.on(
+            events.NewMessage(
+                chats=settings.placement_group_id
+            )
+        )
         async def on_new_message(event):
             """Handle every new message in the placement group."""
-            record_message_received()  # Update watchdog heartbeat
 
-            text = event.message.message or ""
-            if not text.strip():
-                return  # Skip media-only messages (for now)
-
-            # Use the actual message send time, not processing time
-            msg_date = event.message.date
-            if msg_date.tzinfo is None:
-                msg_date = IST.localize(msg_date)
-
-            sender_name = ""
             try:
-                sender = await event.get_sender()
-                if sender:
-                    sender_name = getattr(sender, "first_name", "") or ""
-            except Exception:
-                pass
+                # ---------------------------------------------
+                # Watchdog heartbeat
+                # ---------------------------------------------
 
-            print(f"[Userbot] New message from {sender_name}: {text[:80]}...")
+                record_message_received()
 
-            await ingest_message(
-                text=text,
-                message_date=msg_date,
-                source=MessageSource.USERBOT,
-                telegram_message_id=event.message.id,
-                sender_name=sender_name,
-            )
+                # ---------------------------------------------
+                # Get message text
+                # ---------------------------------------------
+
+                text = event.message.message or ""
+
+                # ---------------------------------------------
+                # Message information
+                # ---------------------------------------------
+
+                message_id = event.message.id
+                message_date = event.message.date
+
+                if message_date.tzinfo is None:
+                    message_date = IST.localize(message_date)
+
+                # ---------------------------------------------
+                # Get sender
+                # ---------------------------------------------
+
+                sender_name = ""
+
+                try:
+                    sender = await event.get_sender()
+
+                    if sender:
+                        sender_name = (
+                            getattr(sender, "first_name", "")
+                            or ""
+                        )
+
+                except Exception as sender_error:
+                    print(
+                        f"[Userbot] Could not get sender: "
+                        f"{sender_error}"
+                    )
+
+                # ---------------------------------------------
+                # Log EVERY message received
+                # ---------------------------------------------
+
+                print("=" * 60)
+                print("[Userbot] NEW TELEGRAM MESSAGE RECEIVED")
+                print(f"[Userbot] Group ID: {event.chat_id}")
+                print(f"[Userbot] Message ID: {message_id}")
+                print(f"[Userbot] Sender: {sender_name}")
+                print(f"[Userbot] Text: {text[:500]}")
+                print("=" * 60)
+
+                # ---------------------------------------------
+                # Ignore media-only messages without extractable text
+                # ---------------------------------------------
+
+                pdf_text = None
+                if event.message.media and getattr(event.message.media, "document", None):
+                    print("[Userbot] Document detected, attempting PDF extraction...")
+                    pdf_text = await download_and_extract_pdf(_client, event.message)
+                    
+                if pdf_text:
+                    text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_text}".strip()
+                    print(f"[Userbot] Successfully extracted {len(pdf_text)} characters from PDF.")
+
+                if not text.strip():
+                    print(
+                        "[Userbot] Message has no text and no extractable PDF. Skipping."
+                    )
+                    return
+
+                # ---------------------------------------------
+                # Send message to AI ingestion pipeline
+                # ---------------------------------------------
+
+                print("[Userbot] Sending message to ingestion pipeline...")
+
+                await ingest_message(
+                    text=text,
+                    message_date=message_date,
+                    source=MessageSource.USERBOT,
+                    telegram_message_id=message_id,
+                    sender_name=sender_name,
+                )
+
+                print(
+                    "[Userbot] Message successfully sent "
+                    "to ingestion pipeline."
+                )
+
+            except Exception as error:
+                print(
+                    f"[Userbot] ERROR processing message: {error}"
+                )
+
+        # -----------------------------------------------------
+        # 7. Keep Telegram connection alive
+        # -----------------------------------------------------
+
+        print("[Userbot] Listener is ACTIVE.")
+        print("[Userbot] Waiting for new messages...")
 
         await _client.run_until_disconnected()
 
-    except Exception as e:
+    except Exception as error:
         set_userbot_running(False)
-        print(f"[Userbot] ❌ Error: {e}")
+
+        print(
+            f"[Userbot] FATAL ERROR: {error}"
+        )
 
 
 async def stop_userbot():
     """Gracefully disconnect the userbot."""
+
     global _client
+
     if _client:
         set_userbot_running(False)
+
         await _client.disconnect()
+
         print("[Userbot] Disconnected")
 
 
 def get_userbot_client() -> TelegramClient | None:
+    """Return the active Telethon client."""
+
     return _client
 
 

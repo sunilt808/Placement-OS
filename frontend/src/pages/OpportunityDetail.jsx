@@ -5,6 +5,7 @@ import { getOpportunity, updateStatus } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import UrgencyBadge from '../components/UrgencyBadge';
 import Timeline from '../components/Timeline';
+import MatchScore from '../components/MatchScore';
 import toast from 'react-hot-toast';
 
 function fmt(ts) {
@@ -167,6 +168,13 @@ export default function OpportunityDetail() {
           <h3 style={{ fontSize: '1.1rem', marginBottom: 16 }}>Opportunity Timeline</h3>
           <Timeline events={opp.timeline} />
         </div>
+
+        {opp.relevance_score !== undefined && (
+          <MatchScore 
+            score={opp.relevance_score} 
+            checks={opp.eligibility_checks} 
+          />
+        )}
       </div>
     </div>
   );

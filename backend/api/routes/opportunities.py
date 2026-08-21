@@ -42,6 +42,7 @@ async def list_opportunities(
     urgency: Optional[str] = None,
     search: Optional[str] = None,
     category: Optional[str] = None,
+    eligibility: Optional[str] = None,
     limit: int = Query(50, le=200),
     skip: int = 0,
 ):
@@ -53,6 +54,8 @@ async def list_opportunities(
         query["status"] = status
     if category:
         query["category"] = category
+    if eligibility:
+        query["eligibility_status"] = eligibility
     if search:
         query["$or"] = [
             {"company": {"$regex": search, "$options": "i"}},

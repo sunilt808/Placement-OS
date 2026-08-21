@@ -77,7 +77,12 @@ export default function OpportunityCard({ opp, onStatusChange }) {
       {/* Header */}
       <div className="opp-card-header">
         <div>
-          <div className="opp-company">{opp.company || 'Unknown Company'}</div>
+          <div className="opp-company">
+            {opp.company || 'Unknown Company'}
+            {opp.eligibility_status === 'ELIGIBLE' && <span title="Eligible" style={{ marginLeft: 6 }}>✅</span>}
+            {opp.eligibility_status === 'UNCLEAR' && <span title="Unclear Eligibility" style={{ marginLeft: 6 }}>⚠️</span>}
+            {opp.eligibility_status === 'NOT_ELIGIBLE' && <span title="Not Eligible" style={{ marginLeft: 6 }}>❌</span>}
+          </div>
           <div className="opp-role">{opp.role || 'Role not specified'}</div>
         </div>
         <StatusBadge status={opp.status} />

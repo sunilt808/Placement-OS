@@ -24,6 +24,7 @@ from models.opportunity import (
 )
 from services.deadline_engine import get_urgency, reminder_times
 from services.reminder_service import schedule_reminders
+from services.eligibility_service import compute_eligibility
 
 # Fuzzy similarity threshold — below this = likely different opportunity
 FUZZY_MATCH_THRESHOLD = 75
@@ -146,6 +147,17 @@ async def _create_opportunity(extraction: AIExtraction, message_id: str) -> str:
         message_id=message_id,
     ))
 
+    # Compute and save eligibility
+    eligibility = await compute_eligibility(doc)
+    await col.update_one(
+        {"_id": result.inserted_id},
+        {"$set": {
+            "eligibility_status": eligibility["eligibility_status"],
+            "relevance_score": eligibility["relevance_score"],
+            "eligibility_checks": eligibility["checks"]
+        }}
+    )
+
     # Schedule deadline reminders
     if extraction.deadline:
         await schedule_reminders(opp_id, extraction.deadline)
@@ -202,7 +214,12 @@ async def _update_opportunity(opp: dict, extraction: AIExtraction, message_id: s
             message_id=message_id,
         ))
 
-    # ── Add message ID to source list ─────────────────────────────────────────
+    # ── Add message ID to source list and update eligibility ──────────────
+    eligibility = await compute_eligibility({**opp, **updates})
+    updates["eligibility_status"] = eligibility["eligibility_status"]
+    updates["relevance_score"] = eligibility["relevance_score"]
+    updates["eligibility_checks"] = eligibility["checks"]
+
     await col.update_one(
         {"_id": opp["_id"]},
         {

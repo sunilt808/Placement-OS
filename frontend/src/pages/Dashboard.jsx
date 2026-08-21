@@ -36,6 +36,13 @@ const URGENCY_SECTIONS = [
     color: 'green',
     empty: 'No upcoming opportunities.',
   },
+  {
+    key: 'gray',
+    urgencies: ['NO_DEADLINE'],
+    label: '⚪ NO DEADLINE SET',
+    color: 'gray',
+    empty: '',
+  },
 ];
 
 export default function Dashboard() {
@@ -43,6 +50,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showOnlyEligible, setShowOnlyEligible] = useState(false);
 
   const load = async () => {
     try {
@@ -59,7 +67,11 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { 
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleStatusChange = (id, status) => {
     setOpportunities(prev =>
@@ -69,7 +81,8 @@ export default function Dashboard() {
   };
 
   const activeOpps = opportunities.filter(o =>
-    !['APPLIED', 'IGNORED'].includes(o.status)
+    !['APPLIED', 'IGNORED'].includes(o.status) &&
+    (!showOnlyEligible || o.eligibility_status === 'ELIGIBLE')
   );
 
   const getSection = (urgencies) =>
@@ -111,9 +124,20 @@ export default function Dashboard() {
             apply for RIGHT NOW?
           </span>
         </h1>
-        <p className="page-subtitle" style={{ marginTop: 8 }}>
-          AI-monitored placements · Never miss an opportunity
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+          <p className="page-subtitle" style={{ margin: 0 }}>
+            AI-monitored placements · Never miss an opportunity
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>
+            <input 
+              type="checkbox" 
+              checked={showOnlyEligible} 
+              onChange={e => setShowOnlyEligible(e.target.checked)} 
+              style={{ width: 16, height: 16 }}
+            />
+            Show only CSE-Eligible
+          </label>
+        </div>
       </div>
 
       {/* Stats Grid */}

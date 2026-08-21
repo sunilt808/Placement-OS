@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Main] Bot could not start: {e}")
 
-    print("[Main] ✅ All systems running")
+    print("[Main] All systems running")
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────

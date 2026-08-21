@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Kolkata"
     watchdog_interval_minutes: int = 30
     daily_summary_hour: int = 8
+    catchup_days: int = 30
 
     # ── Gemini model names ────────────────────────────────────────────────────
     gemini_flash_model: str = "gemini-1.5-flash"

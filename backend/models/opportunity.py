@@ -98,6 +98,8 @@ class OpportunityOut(OpportunityCreate):
     id: str = Field(alias="_id")
     deadline_urgency: Optional[DeadlineUrgency] = None
     relevance_score: Optional[float] = None
+    eligibility_status: Optional[str] = None
+    eligibility_checks: Optional[List[dict]] = None
     created_at: datetime
     updated_at: datetime
 
