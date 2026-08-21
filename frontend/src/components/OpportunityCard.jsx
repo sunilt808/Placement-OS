@@ -110,11 +110,13 @@ export default function OpportunityCard({ opp, onStatusChange }) {
 
       {/* ── Source Row ───────────────────────────── */}
       <div className="opp-meta-row" style={{ fontSize: '0.75rem' }}>
-        <span className="meta-chip" title="Source Document" style={{ opacity: opp.source_document ? 1 : 0.5 }}>
-          <FileText size={12} style={{ color: 'var(--text-muted)' }} />
-          {opp.source_document || 'No Document'}
-        </span>
-        <span className="meta-chip" title="Posted on Telegram">
+        {opp.source_document && (
+          <span className="meta-chip source-document-chip" title={opp.source_document}>
+            <FileText size={12} style={{ color: 'var(--text-muted)' }} />
+            <span>{opp.source_document}</span>
+          </span>
+        )}
+        <span className="meta-chip posted-date-chip" title="Posted on Telegram">
           <Send size={12} style={{ color: 'var(--blue)' }} />
           {opp.telegram_message_date ? formatDeadline(opp.telegram_message_date) : 'Unknown Date'}
         </span>
@@ -132,6 +134,9 @@ export default function OpportunityCard({ opp, onStatusChange }) {
             {remaining}
           </div>
         </div>
+      )}
+      {!opp.deadline && (
+        <div className="opp-no-deadline"><Clock size={14} /> No deadline shared</div>
       )}
 
       {/* ── Actions / Bottom Row ─────────────────── */}
@@ -158,14 +163,11 @@ export default function OpportunityCard({ opp, onStatusChange }) {
               >
                 <ExternalLink size={12} /> Apply
               </a>
-            ) : (
-              <button className="btn btn-ghost btn-sm" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>
-                No Link
-              </button>
-            )}
+            ) : null}
             <button className="btn btn-success btn-sm" onClick={handleApply}>
               <CheckCircle size={12} /> Applied
             </button>
+            <button className="btn btn-ghost btn-sm" onClick={handleIgnore}>Ignore</button>
           </div>
         )}
       </div>

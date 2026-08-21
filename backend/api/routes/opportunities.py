@@ -2,15 +2,18 @@
 api/routes/opportunities.py — CRUD routes for opportunities.
 """
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
+from pathlib import Path
 from typing import Optional, List
 from bson import ObjectId
 from datetime import datetime, timedelta
 
-from database import opportunities_col, events_col
+from database import opportunities_col, events_col, messages_col
 from models.opportunity import ApplicationStatus, OpportunityUpdate
 from services.deadline_engine import get_urgency
 from services.reminder_service import cancel_all_reminders, schedule_reminders
 from services.opportunity_engine import get_timeline
+from config import settings
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
@@ -139,6 +142,107 @@ async def get_stats():
             stats["no_deadline"] += 1
 
     return stats
+
+
+@router.get("/messages")
+async def list_ingested_messages(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    placement_only: bool = False,
+    has_error: bool = False,
+    limit: int = Query(100, le=200),
+    skip: int = 0,
+):
+    """Inspect raw Telegram/import messages and the result of their extraction."""
+    query = {
+        "message_date": {
+            "$gte": datetime.utcnow() - timedelta(days=settings.message_retention_days)
+        }
+    }
+    if category:
+        query["category"] = category
+    if placement_only:
+        query["is_placement_related"] = True
+    if has_error:
+        query["processing_error"] = {"$nin": [None, ""]}
+    if search:
+        query["message_text"] = {"$regex": search, "$options": "i"}
+
+    results = []
+    cursor = messages_col().find(
+        query, sort=[("message_date", -1), ("_id", -1)], skip=skip, limit=limit
+    )
+    async for message in cursor:
+        message["_id"] = str(message["_id"])
+        for field in ("message_date", "processed_at"):
+            if isinstance(message.get(field), datetime):
+                message[field] = message[field].isoformat()
+        source = message.get("source")
+        message["source"] = source.value if hasattr(source, "value") else source
+        message["attachment_available"] = bool(message.get("attachment_storage_key"))
+        results.append(message)
+
+    opportunity_ids = []
+    for message in results:
+        try:
+            if message.get("opportunity_id"):
+                opportunity_ids.append(ObjectId(message["opportunity_id"]))
+        except Exception:
+            continue
+    extracted_by_id = {}
+    if opportunity_ids:
+        async for opp in opportunities_col().find({"_id": {"$in": opportunity_ids}}):
+            deadline = opp.get("deadline")
+            extracted_by_id[str(opp["_id"])] = {
+                "company": opp.get("company"),
+                "role": opp.get("role"),
+                "ctc": opp.get("ctc"),
+                "deadline": deadline.isoformat() if isinstance(deadline, datetime) else deadline,
+                "status": opp.get("status"),
+                "summary": opp.get("summary"),
+                "confidence": opp.get("confidence"),
+                "source_document": opp.get("source_document"),
+                "source_document_available": bool(opp.get("source_document_key")),
+            }
+    for message in results:
+        message["extraction"] = extracted_by_id.get(message.get("opportunity_id"))
+
+    return {
+        "messages": results,
+        "total": await messages_col().count_documents(query),
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@router.get("/messages/{message_id}/attachment")
+async def get_message_attachment(message_id: str):
+    """Download a retained source attachment from the short-lived message inbox."""
+    try:
+        message = await messages_col().find_one({"_id": ObjectId(message_id)})
+    except Exception:
+        raise HTTPException(404, "Message not found")
+    from services.pdf_service import stored_document_path
+    path = stored_document_path(message.get("attachment_storage_key", "")) if message else None
+    if not path:
+        raise HTTPException(404, "Attachment not available")
+    return FileResponse(path, filename=message.get("attachment_filename") or path.name,
+                        media_type=message.get("attachment_mime_type") or "application/octet-stream")
+
+
+@router.get("/{opp_id}/source-document")
+async def get_opportunity_source_document(opp_id: str):
+    """Download the retained source document for an opportunity."""
+    try:
+        opp = await opportunities_col().find_one({"_id": ObjectId(opp_id)})
+    except Exception:
+        raise HTTPException(404, "Opportunity not found")
+    from services.pdf_service import stored_document_path
+    path = stored_document_path(opp.get("source_document_key", "")) if opp else None
+    if not path:
+        raise HTTPException(404, "Source document not available")
+    return FileResponse(path, filename=opp.get("source_document") or path.name,
+                        media_type="application/octet-stream")
 
 
 @router.get("/{opp_id}")

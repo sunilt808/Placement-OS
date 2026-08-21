@@ -25,7 +25,8 @@ _pro_model = None
 try:
     import google.generativeai as genai
     from google.generativeai.types import GenerationConfig
-    if settings.gemini_api_key and settings.gemini_api_key != "YOUR_GEMINI_API_KEY":
+    if (settings.gemini_enabled and settings.gemini_api_key
+            and settings.gemini_api_key != "YOUR_GEMINI_API_KEY"):
         genai.configure(api_key=settings.gemini_api_key)
         _flash_model = genai.GenerativeModel(settings.gemini_flash_model)
         _pro_model = genai.GenerativeModel(settings.gemini_pro_model)
@@ -272,8 +273,9 @@ async def classify_and_extract(
         _hash_cache[content_hash] = local_result
         return local_result, content_hash
 
-    if not settings.gemini_api_key or settings.gemini_api_key == "YOUR_GEMINI_API_KEY":
-        print("[AI] Gemini API key not set — proceeding with local extraction")
+    if (not settings.gemini_enabled or not settings.gemini_api_key
+            or settings.gemini_api_key == "YOUR_GEMINI_API_KEY"):
+        print("[AI] Gemini disabled/unconfigured — proceeding with local extraction")
         _hash_cache[content_hash] = local_result
         return local_result, content_hash
 

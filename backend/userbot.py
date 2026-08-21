@@ -164,16 +164,9 @@ async def start_userbot():
             f"{settings.placement_group_id}"
         )
         
-        # -----------------------------------------------------
-        # 5.5. Scan history
-        # -----------------------------------------------------
-        await _scan_recent_history()
-
-        print("[Userbot] Waiting for new Telegram messages...")
-
-        # -----------------------------------------------------
-        # 6. Register new-message handler
-        # -----------------------------------------------------
+        # Register the live listener BEFORE the catch-up scan. Previously the
+        # scan could take minutes for a busy group, leaving a window in which
+        # newly posted messages were never observed.
 
         @_client.on(
             events.NewMessage(
@@ -283,9 +276,9 @@ async def start_userbot():
                     f"[Userbot] ERROR processing message: {error}"
                 )
 
-        # -----------------------------------------------------
-        # 7. Keep Telegram connection alive
-        # -----------------------------------------------------
+        # The handler is active now, so historical processing cannot cause new
+        # messages to be missed. Hash deduplication safely handles any overlap.
+        await _scan_recent_history()
 
         print("[Userbot] Listener is ACTIVE.")
         print("[Userbot] Waiting for new messages...")

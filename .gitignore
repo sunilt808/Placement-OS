@@ -53,3 +53,6 @@ dist-ssr/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# Runtime source documents downloaded from placement messages
+backend/data/documents/

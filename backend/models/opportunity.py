@@ -66,6 +66,7 @@ class AIExtraction(BaseModel):
     is_cse_relevant: bool = False         # True if score >= 50
     jd_cse_signals: Optional[List[str]] = None  # matched CSE tech keywords from JD
     source_document: Optional[str] = None       # e.g. "Accenture_JD.pdf"
+    source_document_key: Optional[str] = None   # stored local attachment key
     telegram_message_date: Optional[datetime] = None  # original Telegram send time
 
 
@@ -95,6 +96,7 @@ class OpportunityCreate(BaseModel):
     is_cse_relevant: bool = False
     jd_cse_signals: Optional[List[str]] = None
     source_document: Optional[str] = None
+    source_document_key: Optional[str] = None
     telegram_message_date: Optional[datetime] = None
 
 

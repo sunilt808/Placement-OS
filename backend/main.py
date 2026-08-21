@@ -27,14 +27,17 @@ async def lifespan(app: FastAPI):
         print(f"[Main] Userbot error: {e}")
 
     bot_app = None
-    try:
-        from telegram_bot import build_bot_app
-        bot_app = build_bot_app()
-        await bot_app.initialize()
-        await bot_app.start()
-        await bot_app.updater.start_polling(drop_pending_updates=True)
-    except Exception as e:
-        print(f"[Main] Telegram bot error: {e}")
+    if settings.telegram_bot_token and settings.telegram_chat_id:
+        try:
+            from telegram_bot import build_bot_app
+            bot_app = build_bot_app()
+            await bot_app.initialize()
+            await bot_app.start()
+            await bot_app.updater.start_polling(drop_pending_updates=True)
+        except Exception as e:
+            print(f"[Main] Telegram bot error: {e}")
+    else:
+        print("[Main] Telegram bot not configured — continuing without notifications.")
 
     yield
 

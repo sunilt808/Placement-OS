@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ExternalLink, ArrowLeft, Building2, MapPin, DollarSign,
-  Clock, Calendar, CheckCircle, FileText, Send, Zap, Award,
+  Clock, Calendar, CheckCircle, Download, FileText, Send, Zap, Award,
   Link as LinkIcon, Users, BookOpen, Tag
 } from 'lucide-react';
-import { getOpportunity, updateStatus } from '../api/client';
+import { getOpportunity, getOpportunitySourceDocument, updateStatus } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 import UrgencyBadge from '../components/UrgencyBadge';
 import Timeline from '../components/Timeline';
@@ -44,6 +44,20 @@ export default function OpportunityDetail() {
   const navigate = useNavigate();
   const [opp, setOpp] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const downloadSource = async () => {
+    try {
+      const file = await getOpportunitySourceDocument(id);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = opp.source_document || 'source-document';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('The original source document is not available.');
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -203,7 +217,13 @@ export default function OpportunityDetail() {
           <InfoRow icon={Tag} label="Experience" value={opp.experience_requirement} />
           <InfoRow icon={Calendar} label="Assessment Date" value={fmt(opp.assessment_date)} />
           <InfoRow icon={Calendar} label="Interview Date" value={fmt(opp.interview_date)} />
-          <InfoRow icon={FileText} label="Source Document" value={opp.source_document ? `📄 ${opp.source_document}` : null} />
+          {opp.source_document && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+              <FileText size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', minWidth: 130 }}>Source Document</span>
+              <button className="message-download" onClick={downloadSource}><Download size={14} /> {opp.source_document}</button>
+            </div>
+          )}
           <InfoRow icon={Send} label="Posted on Telegram" value={fmt(opp.telegram_message_date)} />
           <InfoRow icon={LinkIcon} label="Registration Link" value={opp.registration_link ? '🔗 Link Available' : null} />
           {opp.skills?.length > 0 && (

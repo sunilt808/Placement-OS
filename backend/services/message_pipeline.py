@@ -56,7 +56,9 @@ async def ingest_message(
     if not text or not text.strip():
         return None
 
-    content_hash = _content_hash(text)
+    # Include the attachment key so different PDF-only messages do not share a
+    # hash merely because their extracted text is empty.
+    content_hash = _content_hash(f"{text}\n{pdf_info.get('storage_key', '')}" if pdf_info else text)
     col = messages_col()
 
     # ── 1. Content hash dedup — never process identical messages twice ─────────
@@ -79,6 +81,8 @@ async def ingest_message(
         # Store attachment info on the raw message
         "attachment_filename": pdf_info.get("filename") if pdf_info else None,
         "attachment_mime_type": pdf_info.get("mime_type") if pdf_info else None,
+        "attachment_storage_key": pdf_info.get("storage_key") if pdf_info else None,
+        "attachment_text_extracted": pdf_info.get("text_extracted") if pdf_info else None,
     }
     result = await col.insert_one(msg_doc)
     message_id = str(result.inserted_id)
@@ -93,6 +97,7 @@ async def ingest_message(
 
         if pdf_info and pdf_info.get("filename"):
             extraction.source_document = pdf_info["filename"]
+            extraction.source_document_key = pdf_info.get("storage_key")
 
         # Always preserve the original Telegram message timestamp
         extraction.telegram_message_date = message_date

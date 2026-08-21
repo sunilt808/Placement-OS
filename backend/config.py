@@ -14,8 +14,10 @@ class Settings(BaseSettings):
     )
 
     # ── Telegram Bot API ──────────────────────────────────────────────────────
-    telegram_bot_token: str
-    telegram_chat_id: str                   # Student's personal Telegram user ID
+    # Integrations are optional. The dashboard, importer and local extractor
+    # must remain usable without Telegram or Gemini credentials.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""              # Student's personal Telegram user ID
 
     # ── Telethon Userbot ──────────────────────────────────────────────────────
     telegram_api_id: Optional[int] = None
@@ -24,7 +26,8 @@ class Settings(BaseSettings):
     placement_group_id: Optional[int] = None   # Group/channel to monitor
 
     # ── Gemini ────────────────────────────────────────────────────────────────
-    gemini_api_key: str
+    gemini_api_key: str = ""
+    gemini_enabled: bool = False
 
     # ── MongoDB ───────────────────────────────────────────────────────────────
     mongodb_uri: str = "mongodb://localhost:27017"
@@ -35,6 +38,7 @@ class Settings(BaseSettings):
     watchdog_interval_minutes: int = 30
     daily_summary_hour: int = 8
     catchup_days: int = 10
+    message_retention_days: int = 3
 
     # ── Gemini model names ────────────────────────────────────────────────────
     gemini_flash_model: str = "gemini-3.6-flash"

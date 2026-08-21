@@ -11,7 +11,10 @@ Returns a dict: { text, filename, mime_type, size_bytes }
 so the pipeline can store the source document name on the opportunity.
 """
 import asyncio
+import hashlib
 import io
+import re
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 # ── PDF libraries ──────────────────────────────────────────────────────────────
@@ -42,6 +45,35 @@ except ImportError:
     _HAS_BS4 = False
 
 MAX_TEXT_LENGTH = 15000  # generous limit for 3–18 page JDs
+DOCUMENTS_DIR = Path(__file__).resolve().parents[1] / "data" / "documents"
+
+
+def _store_document(file_bytes: bytes, filename: str) -> str:
+    """Persist the source attachment with a safe, content-addressed name."""
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename).name) or "attachment"
+    storage_key = f"{hashlib.sha256(file_bytes).hexdigest()[:16]}_{safe_name}"
+    DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = DOCUMENTS_DIR / storage_key
+    if not path.exists():
+        path.write_bytes(file_bytes)
+    return storage_key
+
+
+def stored_document_path(storage_key: str) -> Optional[Path]:
+    if not storage_key or Path(storage_key).name != storage_key:
+        return None
+    path = (DOCUMENTS_DIR / storage_key).resolve()
+    try:
+        path.relative_to(DOCUMENTS_DIR.resolve())
+    except ValueError:
+        return None
+    return path if path.is_file() else None
+
+
+def delete_stored_document(storage_key: str) -> None:
+    path = stored_document_path(storage_key)
+    if path:
+        path.unlink()
 
 
 def _get_filename_from_message(message) -> Optional[str]:
@@ -170,6 +202,8 @@ async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
         print(f"[PDF] Download error: {e}")
         return None
 
+    storage_key = await asyncio.to_thread(_store_document, file_bytes, filename)
+
     # Extract based on type
     def _extract_sync():
         if is_pdf:
@@ -189,8 +223,7 @@ async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
         return None
 
     if not extracted_text:
-        print("[PDF] Extraction yielded no text (possibly image-only or encrypted).")
-        return None
+        print("[PDF] Extraction yielded no text (possibly image-only or encrypted); source retained.")
 
     print(f"[PDF] Extracted {len(extracted_text)} chars from '{filename}'")
 
@@ -204,4 +237,6 @@ async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
         "filename": filename,
         "mime_type": mime_type,
         "size_bytes": size_bytes,
+        "storage_key": storage_key,
+        "text_extracted": bool(extracted_text),
     }

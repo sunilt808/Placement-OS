@@ -90,6 +90,11 @@ async def _run_watchdog():
     await run_watchdog_check()
 
 
+async def _run_message_cleanup():
+    from services.message_retention import purge_expired_messages
+    await purge_expired_messages(settings.message_retention_days)
+
+
 def start_scheduler():
     """Initialize and start the APScheduler."""
     global _scheduler
@@ -100,6 +105,15 @@ def start_scheduler():
         _run_reminder_check,
         trigger=IntervalTrigger(minutes=15),
         id="reminder_check",
+        replace_existing=True,
+    )
+
+    # Raw messages are an inspection inbox, not permanent storage. Source PDFs
+    # linked to an opportunity remain available after this cleanup.
+    _scheduler.add_job(
+        _run_message_cleanup,
+        trigger=CronTrigger(hour=3, minute=15, timezone=IST),
+        id="message_cleanup",
         replace_existing=True,
     )
 

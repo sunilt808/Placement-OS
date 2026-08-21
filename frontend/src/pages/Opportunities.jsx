@@ -13,6 +13,8 @@ export default function Opportunities() {
     search: searchParams.get('search') || '',
     status: searchParams.get('status') || '',
     urgency: searchParams.get('urgency') || '',
+    category: searchParams.get('category') || '',
+    eligibility: searchParams.get('eligibility') || '',
     days: searchParams.get('days') || '',
     cse_only: searchParams.get('cse_only') === 'true',
   });
@@ -24,6 +26,8 @@ export default function Opportunities() {
         search: filters.search || undefined,
         status: filters.status || undefined,
         urgency: filters.urgency || undefined,
+        category: filters.category || undefined,
+        eligibility: filters.eligibility || undefined,
         days: filters.days || undefined,
         cse_only: filters.cse_only || undefined,
         limit: 100
@@ -42,6 +46,8 @@ export default function Opportunities() {
     if (filters.search) params.set('search', filters.search);
     if (filters.status) params.set('status', filters.status);
     if (filters.urgency) params.set('urgency', filters.urgency);
+    if (filters.category) params.set('category', filters.category);
+    if (filters.eligibility) params.set('eligibility', filters.eligibility);
     if (filters.days) params.set('days', filters.days);
     if (filters.cse_only) params.set('cse_only', 'true');
     setSearchParams(params, { replace: true });
@@ -86,6 +92,21 @@ export default function Opportunities() {
           <option value="THIS_WEEK">🟡 This Week</option>
           <option value="UPCOMING">🟢 Upcoming</option>
           <option value="EXPIRED">⚫ Expired</option>
+        </select>
+
+        <select
+          className="filter-select"
+          value={filters.category}
+          onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
+        >
+          <option value="">Any Type</option>
+          <option value="PLACEMENT_OPPORTUNITY">New opportunity</option>
+          <option value="PLACEMENT_UPDATE">Placement update</option>
+          <option value="DEADLINE_UPDATE">Deadline update</option>
+          <option value="ASSESSMENT">Assessment</option>
+          <option value="INTERVIEW">Interview</option>
+          <option value="SHORTLIST">Shortlist</option>
+          <option value="NEEDS_REVIEW">Needs review</option>
         </select>
 
         <select 

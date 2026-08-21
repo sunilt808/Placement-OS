@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert, MessagesSquare } from 'lucide-react';
 
 const NAV_LINKS = [
   { path: '/', label: 'Command Center', icon: LayoutDashboard },
   { path: '/opportunities', label: 'All Opportunities', icon: Briefcase },
   { path: '/applications', label: 'My Applications', icon: CheckSquare },
   { path: '/calendar', label: 'Calendar View', icon: CalendarIcon },
+  { path: '/messages', label: 'Message Inbox', icon: MessagesSquare },
 ];
 
 const SYS_LINKS = [

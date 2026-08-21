@@ -38,6 +38,15 @@ export const getTimeline = (id) =>
 export const deleteOpportunity = (id) =>
   api.delete(`/api/opportunities/${id}`).then(r => r.data);
 
+export const getMessages = (params = {}) =>
+  api.get('/api/opportunities/messages', { params }).then(r => r.data);
+
+export const getMessageAttachment = (id) =>
+  api.get(`/api/opportunities/messages/${id}/attachment`, { responseType: 'blob' }).then(r => r.data);
+
+export const getOpportunitySourceDocument = (id) =>
+  api.get(`/api/opportunities/${id}/source-document`, { responseType: 'blob' }).then(r => r.data);
+
 // ── Reminders ─────────────────────────────────────────────────────────────────
 
 export const getReminders = (limit = 20) =>

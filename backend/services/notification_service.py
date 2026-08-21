@@ -21,6 +21,10 @@ TELEGRAM_API = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
 
 async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mode: str = "HTML"):
     """Send a message to the student's personal chat."""
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        # Notifications are an optional delivery channel; extraction and storage
+        # must never fail merely because Telegram has not been configured.
+        return None
     payload = {
         "chat_id": settings.telegram_chat_id,
         "text": text,

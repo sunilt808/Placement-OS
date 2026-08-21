@@ -98,6 +98,14 @@ COMPANY_BLACKLIST = {
     "non-cse", "robotics engineering",
     "associate trainee", "graduate trainee",  # these are roles, not companies
     "software engineer", "data analyst", "intern",
+    "career", "careers", "job description", "eligibility criteria",
+    "all students", "interested students", "eligible students",
+}
+
+COMPANY_NOISE_WORDS = {
+    "apply", "application", "assessment", "batch", "candidates", "company",
+    "deadline", "drive", "eligible", "hiring", "interview", "placement",
+    "register", "registration", "role", "students", "test", "vacancy",
 }
 
 # Patterns that signal company announcement
@@ -146,6 +154,13 @@ def _is_valid_company_name(name: str) -> bool:
     verb_starts = ["is", "has", "was", "are", "were", "will", "would", "should"]
     if any(name_lower.startswith(v + " ") for v in verb_starts):
         return False
+
+    words = re.findall(r"[a-z0-9]+", name_lower)
+    if not words or all(word in COMPANY_NOISE_WORDS for word in words):
+        return False
+    if any(word in {"hiring", "recruiting", "offering", "inviting", "seeking"}
+           for word in words):
+        return False
     
     return True
 
@@ -164,57 +179,67 @@ def _clean_company_name(name: str) -> str:
 
 def extract_company_nlp(text: str) -> Optional[str]:
     """
-    Multi-strategy company name extractor:
-    1. Known companies corpus (most reliable)  
-    2. Regex pattern matching
-    3. spaCy NER (ORG entities)
+    Extract the hiring company with deterministic local signals.
+
+    A company mentioned in a message is not necessarily the hiring company, so
+    known names are ranked by nearby placement context before we use a generic
+    regex or spaCy entity.
     """
-    # Strategy 1: Known companies corpus — highest confidence
     text_lower = text.lower()
-    best_match = None
-    best_len = 0
-    
+    best_candidate: tuple[int, str] | None = None
+    placement_context = re.compile(
+        r"\b(hiring|recruiting|placement|drive|role|position|ctc|apply|"
+        r"register|internship|job|opening|opportunity)\b", re.IGNORECASE
+    )
     for known in KNOWN_COMPANIES:
-        # Use word-boundary matching for multi-word company names
-        pattern = rf'\b{re.escape(known)}\b'
-        if re.search(pattern, text_lower):
-            if len(known) > best_len:
-                best_match = known
-                best_len = len(known)
-    
-    if best_match:
-        # Restore original casing from text if possible
-        pattern = rf'\b({re.escape(best_match)})\b'
-        match = re.search(pattern, text_lower)
-        if match:
-            start, end = match.span()
-            return text[start:end]
-    
-    # Strategy 2: Regex patterns targeting company introduction phrases
-    for pattern in COMPANY_INTRO_PATTERNS:
+        for match in re.finditer(rf'\b{re.escape(known)}\b', text_lower):
+            before = text_lower[max(0, match.start() - 45):match.start()]
+            after = text_lower[match.end():match.end() + 70]
+            score = len(known)
+            if placement_context.search(before + " " + after):
+                score += 100
+            if re.search(r"(?:company|organisation|organization)\s*[:\-]?\s*$", before):
+                score += 150
+            if re.search(r"\b(?:at|by|with|from)\s*$", before):
+                score += 60
+            if re.search(r"(?:google forms?|linkedin|instagram)\s*$", before):
+                score -= 200
+            candidate = text[match.start():match.end()]
+            if _is_valid_company_name(candidate) and (
+                best_candidate is None or score > best_candidate[0]
+            ):
+                best_candidate = (score, candidate)
+
+    if best_candidate and best_candidate[0] >= 100:
+        return best_candidate[1]
+
+    labelled_patterns = [
+        r"(?i)\b(?:company(?:\s+name)?|organisation|organization)\s*[:\-]\s*([^\n]{2,60})",
+        r"(?im)^\s*([A-Z][A-Za-z0-9&.' -]{1,50})\s*[-–—:]\s*(?:campus\s+)?(?:hiring|placement|drive|recruitment|internship|job)",
+    ]
+    for pattern in labelled_patterns + COMPANY_INTRO_PATTERNS:
         match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if match:
-            candidate = match.group(1).strip()
-            candidate = _clean_company_name(candidate)
+            candidate = _clean_company_name(match.group(1).strip())
             if _is_valid_company_name(candidate) and len(candidate) >= 2:
                 return candidate
-    
-    # Strategy 3: spaCy NER
+
+    # Terse update messages may name a company without an explicit label.
+    if best_candidate:
+        return best_candidate[1]
+
     if _nlp:
         try:
-            doc = _nlp(text[:1000])  # Process first 1000 chars
-            orgs = [
-                ent.text.strip() 
-                for ent in doc.ents 
-                if ent.label_ == "ORG"
-            ]
-            for org in orgs:
-                cleaned = _clean_company_name(org)
+            doc = _nlp(text[:1000])
+            for ent in doc.ents:
+                if ent.label_ != "ORG":
+                    continue
+                cleaned = _clean_company_name(ent.text.strip())
                 if _is_valid_company_name(cleaned):
                     return cleaned
         except Exception as e:
             print(f"[NLP] spaCy extraction failed: {e}")
-    
+
     return None
 
 
@@ -224,9 +249,9 @@ def extract_role_nlp(text: str) -> Optional[str]:
     """
     # Pattern 1: Explicitly labeled role/position
     labeled_patterns = [
-        r"(?:role|designation|position|profile|job\s+title)\s*[:\-]\s*([A-Za-z][A-Za-z0-9\s&()/-]{2,50})",
-        r"(?:hiring\s+for|opening\s+for|position\s+of|role\s+of)\s+([A-Za-z][A-Za-z0-9\s&()/-]{2,50})",
-        r"(?:vacancy|vacancies)\s+(?:for|in)\s+([A-Za-z][A-Za-z0-9\s&()/-]{2,50})",
+        r"(?:role|designation|position|profile|job\s+title)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 \t&()/-]{2,50})",
+        r"(?:hiring\s+for|opening\s+for|position\s+of|role\s+of)\s+([A-Za-z][A-Za-z0-9 \t&()/-]{2,50})",
+        r"(?:vacancy|vacancies)\s+(?:for|in)\s+([A-Za-z][A-Za-z0-9 \t&()/-]{2,50})",
     ]
     for p in labeled_patterns:
         m = re.search(p, text, re.IGNORECASE | re.MULTILINE)

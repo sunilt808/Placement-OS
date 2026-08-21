@@ -36,11 +36,11 @@ from services.notification_service import send_daily_summary
 from services.opportunity_engine import detect_missed_opportunities
 
 IST = pytz.timezone("Asia/Kolkata")
-AUTHORIZED_CHAT_ID = int(settings.telegram_chat_id)
+AUTHORIZED_CHAT_ID = int(settings.telegram_chat_id) if settings.telegram_chat_id.isdigit() else None
 
 
 def _auth_check(update: Update) -> bool:
-    return update.effective_chat.id == AUTHORIZED_CHAT_ID
+    return AUTHORIZED_CHAT_ID is not None and update.effective_chat.id == AUTHORIZED_CHAT_ID
 
 
 # ── Command Handlers ──────────────────────────────────────────────────────────

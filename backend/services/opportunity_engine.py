@@ -139,6 +139,7 @@ async def _create_opportunity(extraction: AIExtraction, message_id: str) -> str:
         "is_cse_relevant": extraction.is_cse_relevant,
         "jd_cse_signals": extraction.jd_cse_signals,
         "source_document": extraction.source_document,
+        "source_document_key": extraction.source_document_key,
         "telegram_message_date": extraction.telegram_message_date,
     }
     result = await col.insert_one(doc)
@@ -194,7 +195,7 @@ async def _update_opportunity(opp: dict, extraction: AIExtraction, message_id: s
 
     # ── Update other fields if they improve existing data ─────────────────────
     for field in ["ctc", "location", "registration_link", "assessment_date",
-                  "interview_date", "summary", "source_document", "telegram_message_date"]:
+                  "interview_date", "summary", "source_document", "source_document_key", "telegram_message_date"]:
         new_val = getattr(extraction, field, None)
         if new_val and not opp.get(field):
             updates[field] = new_val

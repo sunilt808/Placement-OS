@@ -11,6 +11,7 @@ import Import from './pages/Import';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import CalendarView from './pages/CalendarView';
+import Messages from './pages/Messages';
 
 function ProtectedRoute({ children }) {
   const { token } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/applications" element={<ProtectedRoute><Applications /></ProtectedRoute>} />
           <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><CalendarView /></ProtectedRoute>} />
+          <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         </Routes>
