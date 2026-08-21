@@ -102,15 +102,18 @@ export default function OpportunityCard({ opp, onStatusChange }) {
             {opp.location}
           </span>
         )}
-        {opp.source_document && (
-          <span className="meta-chip">
-            📄 {opp.source_document}
-          </span>
-        )}
-        {opp.telegram_message_date && (
-          <span className="meta-chip">
-            📨 {formatDeadline(opp.telegram_message_date)}
-          </span>
+        <span className="meta-chip" title="Source PDF/Doc">
+          📄 {opp.source_document || 'No Document'}
+        </span>
+        <span className="meta-chip" title="JD Posted Date">
+          📨 {opp.telegram_message_date ? formatDeadline(opp.telegram_message_date) : 'Unknown Date'}
+        </span>
+        {opp.registration_link ? (
+          <a href={opp.registration_link} target="_blank" rel="noreferrer" className="meta-chip" style={{ color: 'var(--blue)', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
+            🔗 Google Form / Link
+          </a>
+        ) : (
+          <span className="meta-chip" style={{ opacity: 0.6 }}>🔗 No Link</span>
         )}
         {opp.eligible_branches?.slice(0, 2).map(b => (
           <span key={b} className="meta-chip branch">{b}</span>
@@ -158,7 +161,7 @@ export default function OpportunityCard({ opp, onStatusChange }) {
       {/* Actions */}
       {opp.status !== 'APPLIED' && opp.status !== 'IGNORED' && (
         <div className="opp-actions" onClick={e => e.stopPropagation()}>
-          {opp.registration_link && (
+          {opp.registration_link ? (
             <a
               href={opp.registration_link}
               target="_blank"
@@ -168,6 +171,10 @@ export default function OpportunityCard({ opp, onStatusChange }) {
             >
               <ExternalLink size={12} /> Apply
             </a>
+          ) : (
+            <button className="btn btn-primary btn-sm" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+               Apply (No Link)
+            </button>
           )}
           <button className="btn btn-success btn-sm" onClick={handleApply}>
             <CheckCircle size={12} /> Mark Applied

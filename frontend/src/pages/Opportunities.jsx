@@ -116,6 +116,17 @@ export default function Opportunities() {
           <option value="30">Last 30 Days</option>
         </select>
 
+        <select 
+          className="filter-select"
+          value={filters.eligibility}
+          onChange={e => setFilters(f => ({ ...f, eligibility: e.target.value }))}
+        >
+          <option value="">Any Eligibility</option>
+          <option value="ELIGIBLE">✅ Eligible</option>
+          <option value="UNCLEAR">⚠️ Unclear</option>
+          <option value="NOT_ELIGIBLE">❌ Not Eligible</option>
+        </select
+
         <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', cursor: 'pointer' }}>
           <input 
             type="checkbox" 

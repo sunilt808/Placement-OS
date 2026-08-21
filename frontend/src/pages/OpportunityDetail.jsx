@@ -82,10 +82,14 @@ export default function OpportunityDetail() {
           </div>
           
           <div className="opp-actions">
-            {opp.registration_link && (
+            {opp.registration_link ? (
               <a href={opp.registration_link} target="_blank" rel="noreferrer" className="btn btn-primary">
                 <ExternalLink size={16} /> Apply Now
               </a>
+            ) : (
+              <button className="btn btn-primary" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                <ExternalLink size={16} /> No Link
+              </button>
             )}
             {opp.status !== 'APPLIED' && (
               <button className="btn btn-success" onClick={() => handleStatus('APPLIED')}>

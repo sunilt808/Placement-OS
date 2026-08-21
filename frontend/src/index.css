@@ -12,8 +12,12 @@
 
   /* Text */
   --text-primary: #f0f0ff;
-  --text-secondary: #8b8ba0;
-  --text-muted: #555565;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  /* Accents */
+  --blue: #3b82f6;
+  --blue-soft: rgba(59, 130, 246, 0.12);
 
   /* Urgency colors */
   --red: #ff3b3b;
@@ -373,6 +377,10 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .opp-role {
