@@ -67,7 +67,18 @@ async def list_opportunities(
     
     if days:
         cutoff = datetime.utcnow() - timedelta(days=days)
-        query["telegram_message_date"] = {"$gte": cutoff}
+        # If there's an existing $or from search, we must use $and to combine them
+        days_query = {
+            "$or": [
+                {"telegram_message_date": {"$gte": cutoff}},
+                {"created_at": {"$gte": cutoff}},
+                {"updated_at": {"$gte": cutoff}}
+            ]
+        }
+        if "$or" in query:
+            query = {"$and": [{"$or": query["$or"]}, days_query]}
+        else:
+            query.update(days_query)
 
     if cse_only:
         query["is_cse_relevant"] = True

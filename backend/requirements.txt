@@ -12,8 +12,12 @@ python-telegram-bot==21.3  # with callback query support
 # Telegram - Userbot (Telethon personal account listener)
 telethon==1.36.0
 
-# AI
+# AI (optional enhancement)
 google-generativeai==0.7.0
+
+# NLP - Primary extraction engine (offline, no API required)
+spacy>=3.7.0
+dateparser>=1.2.0
 
 # Scheduling
 apscheduler==3.10.4

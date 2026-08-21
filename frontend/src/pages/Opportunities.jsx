@@ -125,7 +125,7 @@ export default function Opportunities() {
           <option value="ELIGIBLE">✅ Eligible</option>
           <option value="UNCLEAR">⚠️ Unclear</option>
           <option value="NOT_ELIGIBLE">❌ Not Eligible</option>
-        </select
+        </select>
 
         <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', cursor: 'pointer' }}>
           <input 

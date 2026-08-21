@@ -16,7 +16,7 @@ from typing import Optional
 
 from config import settings
 from models.opportunity import AIExtraction, OpportunityCategory
-from services.local_extractor import extract_locally
+from services.nlp_extractor import extract_with_nlp
 
 # ── Configure Gemini (optional) ───────────────────────────────────────────────
 _flash_model = None
@@ -149,18 +149,75 @@ async def _call_gemini(model, prompt: str, system: str) -> dict:
             else:
                 raise e
 
+def _validate_gemini_company(candidate: Optional[str], local_company: Optional[str]) -> Optional[str]:
+    """
+    Guard against Gemini hallucinating descriptions as company names.
+    Rules:
+    - Max 50 chars (a real company name isn't a sentence)
+    - Must not start with lowercase
+    - Must not contain sentence-ending patterns like ". "
+    - Must not be a verb phrase or description
+    """
+    if not candidate:
+        return local_company
+    
+    REJECT_STARTS = [
+        "the ", "a ", "an ", "this ", "that ", "our ", "their ",
+        "is ", "has ", "was ", "are ", "were ", "will ", "overview",
+        "students", "candidates", "please", "dear", "hi ",
+    ]
+    REJECT_PATTERNS = [
+        r'\.\s+[A-Z]',          # Contains a sentence break
+        r',\s+[A-Z][a-z]+ [A-Z]',  # Looks like a list/description
+        r'\b(students?|candidates?|department|placement|college)\b',
+    ]
+    
+    c_lower = candidate.lower().strip()
+    
+    if len(candidate) > 50:
+        return local_company
+    
+    if candidate[0].islower():
+        return local_company
+    
+    for rs in REJECT_STARTS:
+        if c_lower.startswith(rs):
+            return local_company
+    
+    for rp in REJECT_PATTERNS:
+        if re.search(rp, candidate):
+            return local_company
+    
+    return candidate
+
+
+def _validate_gemini_role(candidate: Optional[str], local_role: Optional[str]) -> Optional[str]:
+    """Guard against Gemini returning full sentences as roles."""
+    if not candidate:
+        return local_role
+    if len(candidate) > 60:
+        return local_role
+    if re.search(r'\.\s+[A-Z]', candidate):
+        return local_role
+    return candidate
+
+
 
 def merge_extractions(local: AIExtraction, gemini: AIExtraction) -> AIExtraction:
     """
-    Merge Gemini's semantic extraction with local deterministic extraction.
-    Gemini wins on semantic fields; local wins on URL/regex fields it's reliable at.
-    CSE score: take maximum of both (local is conservative, Gemini may have richer JD understanding).
+    Merge Gemini's optional enhancement with our NLP local extraction.
+    - Local (NLP) wins on company/role via validation guards
+    - Gemini contributes semantic fields (location, better summary)
+    - Strict validation prevents Gemini hallucinations
     """
+    validated_company = _validate_gemini_company(gemini.company, local.company)
+    validated_role = _validate_gemini_role(gemini.role, local.role)
+
     return AIExtraction(
         category=gemini.category if gemini.category != OpportunityCategory.IRRELEVANT else local.category,
         is_placement_related=gemini.is_placement_related or local.is_placement_related,
-        company=gemini.company or local.company,
-        role=gemini.role or local.role,
+        company=validated_company,
+        role=validated_role,
         ctc=gemini.ctc or local.ctc,
         location=gemini.location or local.location,
         eligible_branches=gemini.eligible_branches or local.eligible_branches,
@@ -171,17 +228,16 @@ def merge_extractions(local: AIExtraction, gemini: AIExtraction) -> AIExtraction
         deadline=gemini.deadline or local.deadline,
         assessment_date=gemini.assessment_date or local.assessment_date,
         interview_date=gemini.interview_date or local.interview_date,
-        # Local extractor is better at URL extraction (regex is reliable)
-        registration_link=gemini.registration_link or local.registration_link,
+        registration_link=local.registration_link or gemini.registration_link,
         required_skills=gemini.required_skills or local.required_skills,
         action_required=gemini.action_required or local.action_required,
-        summary=gemini.summary or local.summary,
+        summary=gemini.summary if gemini.summary and len(gemini.summary) > 20 else local.summary,
         confidence=max(gemini.confidence, local.confidence),
         cse_relevance_score=max(gemini.cse_relevance_score, local.cse_relevance_score),
         is_cse_relevant=gemini.is_cse_relevant or local.is_cse_relevant,
         jd_cse_signals=gemini.jd_cse_signals or local.jd_cse_signals,
         source_document=gemini.source_document or local.source_document,
-        telegram_message_date=gemini.telegram_message_date or local.telegram_message_date,
+        telegram_message_date=local.telegram_message_date or gemini.telegram_message_date,
     )
 
 
@@ -206,8 +262,8 @@ async def classify_and_extract(
     if content_hash in _hash_cache:
         return _hash_cache[content_hash], content_hash
 
-    # ── STEP 1: Local intelligence extraction (ALWAYS runs) ───────────────────
-    local_result = extract_locally(text, message_date)
+    # ── STEP 1: Advanced NLP extraction (ALWAYS runs, ZERO API calls) ──────────
+    local_result = extract_with_nlp(text, message_date)
     local_result.telegram_message_date = message_date
 
     # ── STEP 2: Check Gemini API availability ─────────────────────────────────

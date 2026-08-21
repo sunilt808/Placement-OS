@@ -1,26 +1,16 @@
 /**
- * components/OpportunityCard.jsx — Placement opportunity card
+ * components/OpportunityCard.jsx — Clean, well-structured opportunity card
  */
 import { useNavigate } from 'react-router-dom';
-import { MapPin, DollarSign, Clock, ExternalLink, CheckCircle } from 'lucide-react';
+import { Clock, ExternalLink, CheckCircle, FileText, Send, Link as LinkIcon } from 'lucide-react';
 import UrgencyBadge from './UrgencyBadge';
 import StatusBadge from './StatusBadge';
 import { updateStatus } from '../api/client';
 import toast from 'react-hot-toast';
 
-const URGENCY_CARD_CLASS = {
-  TODAY:         'urgency-red',
-  WITHIN_24H:    'urgency-red',
-  TOMORROW:      'urgency-orange',
-  WITHIN_3_DAYS: 'urgency-yellow',
-  THIS_WEEK:     'urgency-yellow',
-  UPCOMING:      'urgency-green',
-};
-
 function formatDeadline(dl) {
   if (!dl) return null;
-  const d = new Date(dl);
-  return d.toLocaleString('en-IN', {
+  return new Date(dl).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true,
     timeZone: 'Asia/Kolkata',
@@ -39,16 +29,31 @@ function timeRemaining(dl) {
   return `${m}m left`;
 }
 
+const URGENCY_BORDER = {
+  TODAY:         'var(--red)',
+  WITHIN_24H:    'var(--red)',
+  TOMORROW:      'var(--orange)',
+  WITHIN_3_DAYS: 'var(--yellow)',
+  THIS_WEEK:     'var(--yellow)',
+  UPCOMING:      'var(--green)',
+  EXPIRED:       'var(--gray)',
+  NO_DEADLINE:   'var(--border)',
+};
+
 export default function OpportunityCard({ opp, onStatusChange }) {
   const navigate = useNavigate();
   const urgency = opp.deadline_urgency;
-  const cardClass = URGENCY_CARD_CLASS[urgency] || '';
+  const accentColor = URGENCY_BORDER[urgency] || 'var(--border)';
+  const remaining = timeRemaining(opp.deadline);
+  const confidence = Math.round((opp.confidence || 0) * 100);
+  const companyDisplay = opp.company || 'Unknown Company';
+  const isUnknown = !opp.company;
 
   const handleApply = async (e) => {
     e.stopPropagation();
     try {
       await updateStatus(opp._id, 'APPLIED');
-      toast.success(`Marked as Applied: ${opp.company}`);
+      toast.success(`Marked as Applied: ${companyDisplay}`);
       onStatusChange && onStatusChange(opp._id, 'APPLIED');
     } catch {
       toast.error('Failed to update status');
@@ -66,99 +71,102 @@ export default function OpportunityCard({ opp, onStatusChange }) {
     }
   };
 
-  const remaining = timeRemaining(opp.deadline);
-  const confidence = Math.round((opp.confidence || 0) * 100);
-
   return (
     <div
-      className={`opp-card ${cardClass} fade-in`}
+      className="opp-card fade-in"
+      style={{ borderLeft: `3px solid ${accentColor}` }}
       onClick={() => navigate(`/opportunities/${opp._id}`)}
     >
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────── */}
       <div className="opp-card-header">
-        <div>
-          <div className="opp-company">
-            {opp.company || 'Unknown Company'}
-            {opp.eligibility_status === 'ELIGIBLE' && <span title="Eligible" style={{ marginLeft: 6 }}>✅</span>}
-            {opp.eligibility_status === 'UNCLEAR' && <span title="Unclear Eligibility" style={{ marginLeft: 6 }}>⚠️</span>}
-            {opp.eligibility_status === 'NOT_ELIGIBLE' && <span title="Not Eligible" style={{ marginLeft: 6 }}>❌</span>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="opp-company" style={{ color: isUnknown ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+              {companyDisplay}
+            </div>
+            {opp.eligibility_status === 'ELIGIBLE' && <span title="Eligible" style={{ flexShrink: 0 }}>✅</span>}
+            {opp.eligibility_status === 'UNCLEAR' && <span title="Unclear" style={{ flexShrink: 0 }}>⚠️</span>}
+            {opp.eligibility_status === 'NOT_ELIGIBLE' && <span title="Not Eligible" style={{ flexShrink: 0 }}>❌</span>}
           </div>
-          <div className="opp-role">{opp.role || 'Role not specified'}</div>
+          <div className="opp-role">
+            {opp.role || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Role not specified</span>}
+          </div>
         </div>
         <StatusBadge status={opp.status} />
       </div>
 
-      {/* Meta chips */}
-      <div className="opp-meta">
+      {/* ── Key Info Row ─────────────────────────── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {opp.ctc && (
-          <span className="meta-chip ctc">
-            <DollarSign size={10} />
-            {opp.ctc}
-          </span>
+          <span className="meta-chip ctc">💰 {opp.ctc}</span>
         )}
-        {opp.location && (
-          <span className="meta-chip location">
-            <MapPin size={10} />
-            {opp.location}
-          </span>
-        )}
-        <span className="meta-chip" title="Source PDF/Doc">
-          📄 {opp.source_document || 'No Document'}
-        </span>
-        <span className="meta-chip" title="JD Posted Date">
-          📨 {opp.telegram_message_date ? formatDeadline(opp.telegram_message_date) : 'Unknown Date'}
-        </span>
-        {opp.registration_link ? (
-          <a href={opp.registration_link} target="_blank" rel="noreferrer" className="meta-chip" style={{ color: 'var(--blue)', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
-            🔗 Google Form / Link
-          </a>
-        ) : (
-          <span className="meta-chip" style={{ opacity: 0.6 }}>🔗 No Link</span>
-        )}
-        {opp.eligible_branches?.slice(0, 2).map(b => (
+        {opp.eligible_branches?.slice(0, 3).map(b => (
           <span key={b} className="meta-chip branch">{b}</span>
         ))}
-        {opp.skills?.slice(0, 3).map(s => (
-          <span key={s} className="meta-chip branch">{s}</span>
-        ))}
         {opp.cgpa_requirement && (
-          <span className="meta-chip">CGPA {opp.cgpa_requirement}</span>
+          <span className="meta-chip">📊 {opp.cgpa_requirement}</span>
+        )}
+        {opp.skills?.slice(0, 3).map(s => (
+          <span key={s} className="meta-chip branch" style={{ color: 'var(--blue)' }}>{s}</span>
+        ))}
+      </div>
+
+      {/* ── Source Row ───────────────────────────── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '0.75rem' }}>
+        <span className="meta-chip" title="Source Document" style={{ opacity: opp.source_document ? 1 : 0.5 }}>
+          <FileText size={10} />
+          {opp.source_document || 'No Document'}
+        </span>
+        <span className="meta-chip" title="Posted on Telegram">
+          <Send size={10} />
+          {opp.telegram_message_date ? formatDeadline(opp.telegram_message_date) : 'Unknown Date'}
+        </span>
+        {opp.registration_link ? (
+          <a
+            href={opp.registration_link}
+            target="_blank"
+            rel="noreferrer"
+            className="meta-chip"
+            style={{ color: 'var(--blue)', fontWeight: 600, textDecoration: 'none' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <LinkIcon size={10} /> Apply Link
+          </a>
+        ) : (
+          <span className="meta-chip" style={{ opacity: 0.4 }}>
+            <LinkIcon size={10} /> No Link
+          </span>
         )}
       </div>
 
-      {/* Deadline */}
+      {/* ── Deadline ─────────────────────────────── */}
       {opp.deadline && (
         <div className="opp-deadline">
-          <Clock size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <Clock size={12} style={{ color: accentColor, flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div className="deadline-label">Deadline</div>
             <div className="deadline-value">{formatDeadline(opp.deadline)}</div>
           </div>
-          <div className="deadline-remaining" style={{
-            color: urgency === 'TODAY' || urgency === 'WITHIN_24H' ? 'var(--red)'
-              : urgency === 'TOMORROW' ? 'var(--orange)'
-              : urgency === 'WITHIN_3_DAYS' || urgency === 'THIS_WEEK' ? 'var(--yellow)'
-              : 'var(--green)'
-          }}>
+          <div className="deadline-remaining" style={{ color: accentColor }}>
             {remaining}
           </div>
         </div>
       )}
 
-      {/* Urgency + confidence row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* ── Bottom Row: Urgency + AI Score ────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <UrgencyBadge urgency={urgency} />
           {opp.cse_relevance_score !== undefined && (
             <span className={`badge ${opp.is_cse_relevant ? 'badge-applied' : 'badge-not-applied'}`}>
-              {opp.is_cse_relevant ? `✅ CSE Relevant — ${opp.cse_relevance_score}%` : `❌ Not CSE`}
+              {opp.is_cse_relevant ? `✅ CSE ${opp.cse_relevance_score}%` : '❌ Not CSE'}
             </span>
           )}
         </div>
-        <span className="confidence">AI: {confidence}%</span>
+        <span className="confidence" title="Extraction Confidence">AI: {confidence}%</span>
       </div>
 
-      {/* Actions */}
+      {/* ── Actions ──────────────────────────────── */}
       {opp.status !== 'APPLIED' && opp.status !== 'IGNORED' && (
         <div className="opp-actions" onClick={e => e.stopPropagation()}>
           {opp.registration_link ? (
@@ -172,8 +180,8 @@ export default function OpportunityCard({ opp, onStatusChange }) {
               <ExternalLink size={12} /> Apply
             </a>
           ) : (
-            <button className="btn btn-primary btn-sm" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-               Apply (No Link)
+            <button className="btn btn-ghost btn-sm" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>
+              No Link
             </button>
           )}
           <button className="btn btn-success btn-sm" onClick={handleApply}>
