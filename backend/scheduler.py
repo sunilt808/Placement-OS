@@ -1,0 +1,130 @@
+"""
+scheduler.py — APScheduler background jobs.
+
+Jobs:
+  1. Reminder check — every 15 minutes
+  2. Daily summary — every day at configured hour (default: 8 AM IST)
+  3. Watchdog check — every watchdog_interval_minutes
+  4. Missed opportunity check — daily
+"""
+import asyncio
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+import pytz
+
+from config import settings
+
+IST = pytz.timezone(settings.timezone)
+_scheduler: AsyncIOScheduler | None = None
+
+
+async def _run_reminder_check():
+    """Check for due reminders and send Telegram alerts."""
+    from services.reminder_service import get_due_reminders, mark_reminder_sent
+    from services.notification_service import send_reminder
+    from database import opportunities_col
+    from bson import ObjectId
+
+    reminders = await get_due_reminders()
+    for reminder in reminders:
+        try:
+            opp = reminder.get("opportunity")
+            opp_id = reminder["opportunity_id"]
+            reminder_id = reminder["_id"]
+            reminder_type = reminder.get("reminder_type", "")
+
+            if opp:
+                await send_reminder(opp, opp_id, reminder_type)
+                await mark_reminder_sent(reminder_id)
+                print(f"[Scheduler] Sent {reminder_type} reminder for {opp.get('company')}")
+        except Exception as e:
+            print(f"[Scheduler] Reminder error: {e}")
+
+
+async def _run_daily_summary():
+    """Send daily placement summary at configured hour."""
+    from database import opportunities_col
+    from services.notification_service import send_daily_summary
+    from services.deadline_engine import get_urgency, DeadlineUrgency
+    from datetime import datetime, timezone
+
+    col = opportunities_col()
+    now = datetime.now(timezone.utc)
+
+    active = await col.count_documents({"status": {"$nin": ["IGNORED", "EXPIRED"]}})
+    applied = await col.count_documents({"status": "APPLIED"})
+    not_applied = await col.count_documents({"status": {"$in": ["NEW", "VIEWED", "NOT_APPLIED"]}})
+
+    # Count by urgency
+    deadline_today = 0
+    deadline_tomorrow = 0
+    this_week = 0
+    upcoming = 0
+
+    async for opp in col.find({"status": {"$nin": ["APPLIED", "IGNORED", "EXPIRED"]}}):
+        urgency = get_urgency(opp.get("deadline"))
+        if urgency in (DeadlineUrgency.TODAY, DeadlineUrgency.WITHIN_24H):
+            deadline_today += 1
+        elif urgency == DeadlineUrgency.TOMORROW:
+            deadline_tomorrow += 1
+        elif urgency in (DeadlineUrgency.WITHIN_3_DAYS, DeadlineUrgency.THIS_WEEK):
+            this_week += 1
+        elif urgency == DeadlineUrgency.UPCOMING:
+            upcoming += 1
+
+    stats = {
+        "active": active,
+        "applied": applied,
+        "not_applied": not_applied,
+        "deadline_today": deadline_today,
+        "deadline_tomorrow": deadline_tomorrow,
+        "this_week": this_week,
+        "upcoming": upcoming,
+    }
+    await send_daily_summary(stats)
+
+
+async def _run_watchdog():
+    from services.watchdog import run_watchdog_check
+    await run_watchdog_check()
+
+
+def start_scheduler():
+    """Initialize and start the APScheduler."""
+    global _scheduler
+    _scheduler = AsyncIOScheduler(timezone=IST)
+
+    # Reminder check every 15 minutes
+    _scheduler.add_job(
+        _run_reminder_check,
+        trigger=IntervalTrigger(minutes=15),
+        id="reminder_check",
+        replace_existing=True,
+    )
+
+    # Daily summary at configured hour (IST)
+    _scheduler.add_job(
+        _run_daily_summary,
+        trigger=CronTrigger(hour=settings.daily_summary_hour, minute=0, timezone=IST),
+        id="daily_summary",
+        replace_existing=True,
+    )
+
+    # Watchdog check
+    _scheduler.add_job(
+        _run_watchdog,
+        trigger=IntervalTrigger(minutes=settings.watchdog_interval_minutes),
+        id="watchdog",
+        replace_existing=True,
+    )
+
+    _scheduler.start()
+    print(f"[Scheduler] Started. Reminder check: every 15min | Daily summary: {settings.daily_summary_hour}:00 IST | Watchdog: every {settings.watchdog_interval_minutes}min")
+
+
+def stop_scheduler():
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+        print("[Scheduler] Stopped")

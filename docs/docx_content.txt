@@ -1,0 +1,154 @@
+AI Placement Monitor
+Feasibility Review, Recommended Architecture Change, and Complete Build Plan
+Prepared 20 August 2026
+
+Contents
+1. Executive Summary
+2. The Core Problem: Manual Forwarding Defeats the Purpose
+3. Recommended Fix: A Personal-Account Listener (“Userbot”)
+4. Revised End-to-End Architecture
+5. Tech Stack Decisions
+6. AI Classification & Extraction — Refinements
+7. Duplicate Detection — A Cheaper, Layered Approach
+8. Deployment & Uptime
+9. Database
+10. Timezone & Date Handling
+11. Risk Register
+12. Revised Phased Build Plan
+13. Test Cases
+14. Success Criteria
+15. Final Recommendation Summary
+
+1. Executive Summary
+The original brief already contains a lot of good product thinking: the classification schema, the extraction fields, the deduplication logic, the deadline-extension handling, and the “never miss, optimize for recall” philosophy are all sound and worth keeping as-is.
+But one part of the architecture works against its own stated goal, and a few operational pieces that any 24/7 personal automation project needs were left out. This document explains the problem, proposes a better ingestion method, and lays out a complete, phased plan that keeps everything good from the original spec and fixes the rest.
+2. The Core Problem: Manual Forwarding Defeats the Purpose
+The stated goal is: never miss a placement opportunity because a message was buried under 100+ messages a day. The proposed fix for new messages is that the student manually watches the group and forwards anything that looks relevant to the bot.
+That is the same task the system is supposed to remove. To decide whether a message is worth forwarding, the student first has to read and judge it — which means they have already done the noticing that the whole system exists to automate. Any message they skim past, mute, or dismiss half-asleep at 2am is missed exactly as before, except now there is also a bot that never sees it either. The AI classification, extraction, and dedup logic downstream is genuinely useful — but it is starved of input by a manual gate at the front door that quietly reproduces the original failure mode.
+Two honest ways to fix this:
+Forward everything, not just what looks relevant. This recovers the “AI decides, not you” property, but is still manual labor — one tap per message, all day, every day.
+Remove the manual step entirely. Give the pipeline passive read access to the group without needing to be “added” to it. This is the better fix, and it is achievable despite the “can’t add an external bot” constraint — because the recommended approach below doesn’t use a bot at all.
+3. Recommended Fix: A Personal-Account Listener (“Userbot”), Not a Forwarding Bot
+3.1 How it works
+Telegram exposes two different APIs:
+The Bot API (what BotFather bots use) — a bot account that has to be explicitly added to a chat by someone with permission to add members. This is exactly what the college group blocks.
+The Client API (MTProto) — the same protocol the official Telegram apps use to log in as a real user. Libraries such as Telethon (Python) or GramJS (Node) let a script log in as the student’s own Telegram account using their phone number once, then reuse that session going forward.
+The student is presumably already a member of the placement group — they receive the 100+ messages a day. A script logged into their own account, using their own existing membership, can listen to every new message in that group in real time. Nothing is “added” to the group, and no admin needs to approve anything, because there is no bot in the group at all — just the student’s own account, automated.
+This single change removes the manual-forward step completely for the live-message path. Every message the student’s account can see, the pipeline can see, the instant it arrives.
+3.2 Honest tradeoffs
+Telegram’s terms discourage automated/bulk actions on a normal account (spam, mass-adding, scraping at scale). Passive, read-only listening on a group the student already legitimately belongs to is a much lower-risk use of the same libraries — it is a widely used pattern for personal notification tools, archiving, and cross-posting bridges — but it does sit in a gray area of the terms of service rather than something Telegram explicitly endorses. Recommendation: keep it strictly read-only. Never send messages, join or leave groups, or add contacts through the automated session.
+The API credentials (api_id / api_hash from my.telegram.org) and the resulting session string are effectively a login token for the student’s real account — store them like a password: environment variable only, never committed to source control, never shared.
+If the session gets logged out (a new device login elsewhere, a Telegram-side flag, an expired session) the listener goes silent with no obvious symptom — the dashboard just quietly stops receiving new opportunities. This needs its own monitoring; see Section 8.
+3.3 Keep the forwarding bot too — as a backup channel, not the primary one
+The original Bot-API bot is still worth building, just demoted from “primary ingestion path” to “backup and manual override”:
+If the userbot session ever drops, forwarded messages keep the pipeline alive until it is fixed.
+It covers messages the student sees relayed through other channels — a classmate’s WhatsApp forward, a screenshot, anything outside the Telegram group itself.
+It gives a manual “make sure the AI saw this” option for peace of mind on anything that feels important.
+Both paths feed the same message-ingestion pipeline and the same duplicate-detection logic, so nothing downstream needs to know which path a message came in through.
+4. Revised End-to-End Architecture
+Historical data (one-time)
+College Telegram group → Telegram export (previous ~1 month) → Parser → Keyword/rule pre-filter → Gemini (batch) → Structured extraction → MongoDB
+Live data (ongoing) — primary path
+College Telegram group → Student’s own account (already a member) → Userbot listener (Telethon session, read-only) → Message parser → Gemini (every message, no discard filter) → Classification + extraction → Duplicate check → Create / Update → MongoDB → Telegram alert (sent via the Bot-API bot, to the student only) → Deadline scheduler → Reminders
+Live data (ongoing) — backup path
+Student notices something outside the group, or the userbot session is down → forwards it to the personal Bot-API bot → joins the same pipeline from “Message parser” onward
+5. Tech Stack Decisions
+Layer
+Original Plan
+Recommendation
+Why
+New-message ingestion
+Manual forward to a Bot-API bot
+Telethon userbot listener as the primary path; keep the forward bot as backup
+Removes the human-judgment gate that was silently reproducing the “buried message” problem
+Historical import
+Upload CSV / JSON / TXT / HTML export
+Keep as-is
+The only realistic way to get Telegram’s past history — Telegram does not offer another route to older messages
+Frontend
+React + Vite
+Fine as the Phase 2/3 target; consider a server-rendered page (FastAPI + Jinja2) for the Phase 1 walking skeleton
+For a one-user tool, the fastest way to a proven pipeline is skipping the SPA build until classification and alerts work end to end
+Database
+MongoDB
+MongoDB is a reasonable fit for the flexible extraction fields; SQLite/Postgres is a valid lighter option if you’d rather not run a database server
+Either works — MongoDB costs a bit more ops for a single-user tool, SQLite costs a bit more schema discipline
+Hosting
+Not specified
+A small always-on VPS or a free-tier always-on VM (Section 8)
+The whole design depends on something running 24/7; this was the one piece missing from the original plan
+Scheduler
+APScheduler
+Keep
+Fine for a single always-on process
+
+6. AI Classification & Extraction — Refinements
+Everything in the original brief here is worth keeping: the nine categories, the extraction field list, the “never invent” rule, storing confidence from 0 to 1, and routing uncertain messages to NEEDS_REVIEW. Three refinements on top:
+Recall-first live path. For the live stream, don’t use the keyword pre-filter as a discard gate. At realistic group volumes (well under a few hundred messages a day) sending everything straight to a fast, inexpensive Gemini tier costs very little, and any prefilter is one more place a genuine opportunity can quietly die. Use the keyword list only to flag urgency for triage — not to decide whether Gemini ever sees the message. Save the discard-before-Gemini prefilter for the one-time historical bulk import, where volume (a month of messages at once) makes cost and latency an actual concern.
+NEEDS_REVIEW still alerts. Don’t let “uncertain” quietly sit in a queue nobody checks — send it as a Telegram alert with a visible “low confidence, please check” flag. This matches the original rule that the AI is an assistant and the student makes the final call.
+Timestamp-anchored date resolution. College messages say “tomorrow,” “by EOD,” “next Monday,” “in 2 days.” When Gemini resolves these into real dates, it must anchor to the message’s original send time, not to the moment it happens to be processed. This matters most for the historical import, which may process a month-old message days or weeks after it was actually sent — resolving “tomorrow” against today’s date instead of the message’s date would silently corrupt every relative deadline in the batch. Always pass the message’s original timestamp into the extraction prompt.
+7. Duplicate Detection — A Cheaper, Layered Approach
+Keep the original signal list (company, role, registration URL, similarity, message content, existing opportunity ID), but apply it in three layers so most decisions are resolved without an AI call:
+1. Rule-based signature first. Normalize company + role + registration link (lowercase, trim, strip tracking parameters) and look up an exact or near match. This catches most plain reminders and repeats for free.
+2. Fuzzy text similarity second. If there’s no signature match, compare against opportunities from roughly the last 60 days using simple text similarity. This catches paraphrased reminders and deadline-extension messages that reword the original announcement.
+3. Gemini as tie-breaker last. Only call it when the similarity score lands in an ambiguous middle band — for example, deciding whether an update is about the same ABC Technologies SDE role or a new, unrelated ABC Technologies opening. Most duplicate decisions never need to reach this step, which keeps API cost and latency down.
+8. Deployment & Uptime (missing from the original plan)
+Every part of this system — the userbot listener, the forwarding bot, the reminder scheduler — only works if a process is running continuously. The original brief never says where or how this runs, which is the most common way a personal automation project like this quietly dies a week after launch.
+Options, roughly simplest to most robust:
+A low-cost always-on VPS, or a free-tier always-on VM. Run everything under a process manager — systemd, or Docker with a restart policy — so a crash restarts automatically.
+A home machine (old laptop, Raspberry Pi). Free, but only as reliable as the home internet and power connection — fine as a starting point, not ideal long term.
+Managed platforms (Railway, Render, Fly.io, etc.). Convenient, but confirm the specific plan keeps a background worker alive 24/7 — some free tiers spin idle background processes down, which would silently break the listener.
+Whichever option is chosen, add a simple watchdog: a scheduled check (for example, every 30 minutes) that confirms the userbot session is still connected and has processed at least one heartbeat recently, and sends a Telegram DM to the student if not. A few minutes of setup here prevents the worst failure mode in this whole design — the system looking fine while quietly not listening.
+9. Database
+Keep the original three collections — opportunities, messages, reminders — the schema is well thought out and does not need changes. MongoDB fits the flexible, optional extraction fields well. If the goal is to minimize what has to be operated (one student, one group), SQLite with a couple of JSON columns via SQLModel is a valid lighter-weight substitute that needs no separate database server — worth considering if MongoDB hosting turns out to be the most annoying part of deployment.
+10. Timezone & Date Handling
+Not addressed in the original brief. Recommendation: parse and store all deadlines and dates in UTC internally, always display in IST (Asia/Kolkata) in alerts and on the dashboard, and treat every relative date (“tomorrow,” “in 3 days”) as relative to India time. This avoids a whole category of off-by-one deadline bugs.
+11. Risk Register
+Risk
+Impact
+Mitigation
+Userbot session gets logged out or flagged
+Ingestion silently stops
+Watchdog / heartbeat alert (Section 8); keep the forward-bot backup path alive
+Gemini API downtime or rate limits
+Messages could be lost or delayed
+Already handled well in the original brief — save the original message, mark it for retry, never drop it. Keep this rule.
+Relative dates resolved against the wrong “now”
+Wrong deadlines, especially in the historical import
+Anchor all date resolution to the message’s original timestamp (Section 6)
+Single personal account is the only ingestion path
+If the account is compromised or suspended, the whole pipeline goes down
+Keep the manual-forward bot as an independent backup channel; don’t automate anything else through the same session
+Database or dashboard exposed publicly by accident
+Personal placement data — and possibly classmates’ names — leaked
+Keep the original privacy rule: auth-gated, never public, no third-party sends
+Over-aggressive keyword prefilter on the live path
+A genuine opportunity is silently discarded before Gemini ever sees it
+Don’t gate the live path (Section 6) — prefilter only for the one-time historical batch
+
+12. Revised Phased Build Plan
+Phase 0 — Prove the riskiest assumption first (new)
+Get API credentials from my.telegram.org, set up a Telethon session logged into the student’s own account, and write a minimal script that just prints every new message in the placement group to the console.
+This is the one genuinely unproven piece of the whole design — whether the account reliably receives real-time messages without interruption. Confirm it works for a few days before building anything else on top of it.
+Phase 1 — Core (adjusted)
+FastAPI backend, MongoDB (or SQLite), message ingestion from both the userbot listener and a basic forwarding bot, Gemini classification and extraction, save opportunity, Telegram alert. Same as the original Phase 1, with the ingestion source changed.
+Phase 2 — Dashboard
+Same as the original: opportunity list, detail page, search/filter, status management. Consider a minimal server-rendered version first if speed to a working tool matters more than a polished single-page app.
+Phase 3 — Historical import
+Same as the original: export upload, parser, keyword pre-filter (kept here, deliberately not on the live path), batch Gemini processing, duplicate merging into the opportunities already discovered live.
+Phase 4 — Automation
+Same as the original: deadline scheduler, reminders, extension detection, daily summary — plus the uptime watchdog from Section 8.
+Phase 5 — Advanced
+Same as the original: eligibility profile, relevance score, better duplicate detection, OCR and PDF handling for image announcements.
+13. Test Cases
+Keep the original five test cases — they are well chosen and still valid. Add three more:
+Test 6 — Double forward. The same message is forwarded twice by mistake (same text, two different Telegram message IDs). The message hash should catch it: no duplicate opportunity, no duplicate alert.
+Test 7 — Backdated relative deadline. A historical message from three weeks ago says “register by tomorrow.” The resolved deadline must land the day after the message’s original send date — not the day after the import was run.
+Test 8 — Silent listener failure. Kill the userbot listener process for longer than the watchdog’s check interval. A heartbeat alert should reach the student before any placement message is actually missed.
+14. Success Criteria
+Keep all ten original criteria (recognized messages, extraction, alerts, dedup, reminders, pending-opportunity visibility, working without direct bot access, historical import, applied/not-applied tracking). Add two more:
+11. New messages reach the pipeline without the student needing to notice or judge them first — the userbot path is doing the work, not the student’s attention.
+12. If the ingestion pipeline goes down, the student is notified within the watchdog interval — not after discovering a deadline was missed.
+15. Final Recommendation Summary
+The idea is sound, and the AI pipeline design — classification, extraction, deduplication, deadline handling — does not need to change. The one architectural change worth making before writing any code is swapping manual forwarding for a personal-account listener as the primary ingestion path, because the manual version quietly recreates the exact problem it is meant to solve.
+Everything else in this document — uptime monitoring, timestamp-anchored dates, a cheaper duplicate-detection order, and a Phase 0 that proves the riskiest assumption first — is refinement, not replacement, of a plan that was already mostly right.
