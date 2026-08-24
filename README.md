@@ -37,6 +37,71 @@ AI API keys required.
 
 ## 🏗️ Architecture
 
+### System flow
+
+```
+                 ┌─────────────────────────────────────────────┐
+                 │                  TELEGRAM                   │
+                 │   placement group · bot chats · exports     │
+                 └──────┬─────────────────┬────────────────┬───┘
+                        │ userbot         │ Bot API        │ JSON/TXT/HTML
+                        │ (Telethon)      │ (forwards,     │ export files
+                        │  live listener  │  /commands)    │
+                        │                 │                ▼
+                        │                 │        telegram_importer.py
+                        │                 │        (SSE progress upload)
+                        └────────┬────────┴────────┬───────┘
+                                 ▼                 ▼
+                    ┌──────────────────────────────────────┐
+                    │       message_pipeline.py            │
+                    │  content-hash dedup → persist raw →  │
+                    │  classify_and_extract()              │
+                    └──────────────────┬───────────────────┘
+                                       ▼
+              ┌───────────────────────────────────────────────┐
+              │          AI LAYER — local first               │
+              │  nlp_extractor.py (spaCy · dateparser · regex)│
+              │  PDF/DOCX text · Tesseract OCR for posters    │
+              │  Gemini Flash → Pro escalation (OPTIONAL)     │
+              └───────────────────────┬───────────────────────┘
+                                      ▼
+   ┌──────────────── opportunity_engine.py ────────────────────────┐
+   │  L1 signature dedup → L1.5 same-company merge →               │
+   │  L2 RapidFuzz fuzzy match → create/update ONE drive record    │
+   │  event timeline · eligibility & relevance scoring             │
+   └──────────────┬───────────────────────────┬───────────────────┘
+                  ▼                           ▼
+   ┌────────────────────────────┐   ┌──────────────────────────────┐
+   │     MongoDB (Motor async)  │   │     deadline_engine.py       │
+   │  opportunities · messages  │◄─►│  EXPIRED/TODAY/24H/TOMORROW/ │
+   │  events · reminders ·      │   │  WEEK/UPCOMING — computed in │
+   │  app_settings              │   │  UTC, displayed in IST       │
+   └─────────────┬──────────────┘   └──────────────┬───────────────┘
+                 │                                 ▼
+                 │              ┌──────────────────────────────────┐
+                 │              │    scheduler.py (APScheduler)    │
+                 │              │  reminder checks every 15 min ·  │
+                 │              │  daily summary 08:00 IST ·       │
+                 │              │  watchdog · janitor purge 03:15  │
+                 │              └───────────────┬──────────────────┘
+                 ▼                              ▼
+   ┌────────────────────────────┐   ┌──────────────────────────────┐
+   │   FastAPI — main.py        │   │  notification_service.py     │
+   │   JWT auth on ALL routes   │   │  Telegram alerts + 🎉        │
+   │   REST + SSE endpoints     │   │  shortlist pings + inline    │
+   │   /api/health probe        │   │  Mark Applied / Snooze       │
+   └─────────────┬──────────────┘   └──────────────────────────────┘
+                 ▼
+   ┌────────────────────────────┐        Hosting: MongoDB Atlas · Render
+   │  React 19 + Vite dashboard │        (API) · Vercel (UI)
+   │  Dashboard · Opportunities │
+   │  Calendar · Messages ·     │
+   │  Import · Settings · Gemini│
+   └────────────────────────────┘
+```
+
+### Repository layout
+
 ```
 placement-tracker/
 ├── backend/                  # FastAPI + Python

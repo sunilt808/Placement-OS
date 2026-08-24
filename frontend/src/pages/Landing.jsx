@@ -57,6 +57,34 @@ const ENGINEERING = [
   { k: 'Fail-closed security', v: 'JWT auth guards every data route; docs endpoints are stripped unless explicitly enabled.' },
 ];
 
+const ARCHITECTURE = [
+  {
+    name: 'Ingestion',
+    desc: 'Three parallel capture paths converge into one shared pipeline — nothing posted in the group can slip through.',
+    parts: ['Telethon userbot · live listener', 'Bot API forwards & commands', 'Historical import · SSE stream'],
+  },
+  {
+    name: 'Extraction',
+    desc: 'Offline-first understanding. A keyword pre-filter feeds local NLP; paid AI is strictly an optional enhancer.',
+    parts: ['content-hash dedup', 'spaCy NER + role taxonomy', 'dateparser IST anchoring', 'Tesseract OCR · PDF · DOCX', 'Gemini Flash→Pro (opt-in)'],
+  },
+  {
+    name: 'State Engine',
+    desc: 'Every repeat post converges into ONE evolving drive record with a complete event timeline.',
+    parts: ['signature dedup', 'RapidFuzz merge ≥75', 'opportunity_events timeline', 'eligibility scoring', 'MongoDB · Motor async'],
+  },
+  {
+    name: 'Deadlines & Delivery',
+    desc: 'Deterministic time math owns urgency — never an LLM guess. Alerts escalate until you act.',
+    parts: ['UTC-computed urgency buckets', 'APScheduler 3d / 24h / 3h', 'inline Mark Applied buttons', 'lifecycle janitor'],
+  },
+  {
+    name: 'Interface',
+    desc: 'A JWT-secured control center reading live Atlas data — briefing first, noise never.',
+    parts: ['React 19 + Vite', 'morning briefing & calendar', 'raw message inbox', 'storage guardian'],
+  },
+];
+
 function Typewriter() {
   const ref = useRef(null);
   useEffect(() => {
@@ -266,6 +294,23 @@ export default function Landing() {
         .flow-arrow { color:#67e8f9; font-weight:800; animation: nudgeX 1.4s ease-in-out infinite; }
         @keyframes nudgeX { 0%,100% { transform: translateX(0);} 50% { transform: translateX(5px);} }
 
+        .arch { max-width: 780px; margin: 0 auto; }
+        .arch-layer { border:1px solid var(--border); background: var(--bg-secondary); border-radius:18px;
+                      padding:20px 22px;
+                      transition: transform .25s cubic-bezier(.2,.8,.2,1), border-color .25s ease, box-shadow .25s ease; }
+        .arch-layer:hover { transform: translateY(-4px); border-color:#6366f166;
+                            box-shadow: 0 16px 36px -18px rgba(99,102,241,.4); }
+        .arch-layer:nth-child(even):hover { border-color:#22d3ee66; box-shadow: 0 16px 36px -18px rgba(34,211,238,.35); }
+        .arch-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:13px; }
+        .arch-num { font-family: ui-monospace, Consolas, monospace; font-size:.78rem; font-weight:800; color:#67e8f9;
+                    border:1px solid var(--border); background:color-mix(in srgb, var(--bg-primary) 60%, transparent);
+                    padding:5px 9px; border-radius:9px; margin-top:2px; }
+        .arch-name { font-weight:800; font-size:.98rem; margin-bottom:4px; }
+        .arch-desc { color:var(--text-muted); font-size:.84rem; line-height:1.55; }
+        .arch-link { text-align:center; color:#67e8f9; font-size:.9rem; padding:7px 0; line-height:1;
+                     animation: nudgeY 1.6s ease-in-out infinite; }
+        @keyframes nudgeY { 0%,100% { transform: translateY(0);} 50% { transform: translateY(4px);} }
+
         .stack-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap:18px; }
         .stack-card { border:1px solid var(--border); background:var(--bg-secondary); border-radius:18px;
                       padding:22px; transition: transform .25s cubic-bezier(.2,.8,.2,1), border-color .25s ease, box-shadow .25s ease; }
@@ -375,6 +420,32 @@ export default function Landing() {
           <span className="flow-step">Local extraction + role matching</span><span className="flow-arrow">→</span>
           <span className="flow-step">One clean drive card</span><span className="flow-arrow">→</span>
           <span className="flow-step">Deadline alerts until you apply</span>
+        </div>
+      </section>
+
+      <section className="section" id="architecture" style={{ paddingTop: 0 }}>
+        <h2 className="section-title reveal">Architecture</h2>
+        <p className="section-sub reveal">Five layers, one pipeline. AI suggests — Python decides.</p>
+        <div className="arch">
+          {ARCHITECTURE.map((layer, i) => (
+            <div key={layer.name}>
+              <div className="arch-layer reveal" style={{ transitionDelay: `${i * 80}ms` }}>
+                <div className="arch-head">
+                  <span className="arch-num">{String(i + 1).padStart(2, '0')}</span>
+                  <div>
+                    <div className="arch-name">{layer.name}</div>
+                    <div className="arch-desc">{layer.desc}</div>
+                  </div>
+                </div>
+                <div className="stack-items">
+                  {layer.parts.map((p) => <span className="stack-chip" key={p}>{p}</span>)}
+                </div>
+              </div>
+              {i < ARCHITECTURE.length - 1 && (
+                <div className="arch-link reveal" style={{ transitionDelay: `${i * 80 + 40}ms` }}>▼</div>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
