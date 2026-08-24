@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert, MessagesSquare, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV_LINKS = [
@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { path: '/applications', label: 'My Applications', icon: CheckSquare },
   { path: '/calendar', label: 'Calendar View', icon: CalendarIcon },
   { path: '/messages', label: 'Message Inbox', icon: MessagesSquare },
+{ path: '/gemini', label: 'Gemini', icon: Sparkles },
 ];
 
 const SYS_LINKS = [

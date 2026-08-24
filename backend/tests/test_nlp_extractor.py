@@ -34,3 +34,16 @@ def test_local_extraction_builds_a_usable_opportunity_without_gemini():
     assert result.company == "Acme Technologies Pvt Ltd"
     assert result.role == "Software Engineer"
     assert result.is_placement_related is True
+
+def test_signoff_is_never_a_company():
+    text = "Thanks & Regards\nSubject: eInfochips Campus Drive - Re-Registration Required"
+    assert extract_company_nlp(text) == "eInfochips"
+
+
+def test_camelcase_brands_are_valid_companies():
+    text = "Subject: eInfochips Campus Drive\nRegister by 30 Aug 2026"
+    assert extract_company_nlp(text) == "eInfochips"
+
+
+def test_plain_greeting_has_no_company():
+    assert extract_company_nlp("Thanks & Regards, placement cell") is None

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Navbar from './components/Navbar';
+import Topbar from './components/Topbar';
 import Dashboard from './pages/Dashboard';
 import Opportunities from './pages/Opportunities';
 import OpportunityDetail from './pages/OpportunityDetail';
@@ -12,6 +13,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import CalendarView from './pages/CalendarView';
 import Messages from './pages/Messages';
+import GeminiPage from './pages/GeminiPage';
 import Landing from './pages/Landing';
 
 function ProtectedRoute({ children }) {
@@ -21,6 +23,7 @@ function ProtectedRoute({ children }) {
     <div className="layout">
       <Navbar />
       <main className="main-content">
+        <Topbar />
         {children}
       </main>
     </div>
@@ -44,6 +47,7 @@ export default function App() {
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+<Route path="/gemini" element={<ProtectedRoute><GeminiPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster 

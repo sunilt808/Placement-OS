@@ -1,5 +1,5 @@
-/**
- * api/client.js — Axios client for backend API.
+﻿/**
+ * api/client.js â€” Axios client for backend API.
  */
 import axios from 'axios';
 
@@ -30,7 +30,7 @@ api.interceptors.response.use(
   }
 );
 
-// ── Opportunities ─────────────────────────────────────────────────────────────
+// â”€â”€ Opportunities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const getOpportunities = (params = {}) =>
   api.get('/api/opportunities', { params }).then(r => r.data);
@@ -59,12 +59,12 @@ export const getMessageAttachment = (id) =>
 export const getOpportunitySourceDocument = (id) =>
   api.get(`/api/opportunities/${id}/source-document`, { responseType: 'blob' }).then(r => r.data);
 
-// ── Reminders ─────────────────────────────────────────────────────────────────
+// â”€â”€ Reminders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const getReminders = (limit = 20) =>
   api.get('/api/reminders', { params: { limit } }).then(r => r.data);
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const getProfile = () =>
   api.get('/api/settings/profile').then(r => r.data);
@@ -84,7 +84,7 @@ export const getSystemStatus = () =>
 export const getHealth = () =>
   api.get('/api/health').then(r => r.data);
 
-// ── Import (SSE-based) ────────────────────────────────────────────────────────
+// â”€â”€ Import (SSE-based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const uploadExport = async (file, onProgress) => {
   const formData = new FormData();

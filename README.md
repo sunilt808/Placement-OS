@@ -26,6 +26,9 @@ AI API keys required.
 | ⏰ **Deadline Engine** | TODAY/WITHIN_24H/TOMORROW/… buckets computed in UTC, shown in IST; reminders at 3d/24h/3h |
 | 🔄 **Dedup + Timeline** | Signature + fuzzy dedup merges repeat posts into ONE drive with a full event timeline incl. deadline extensions |
 | ♻️ **Lifecycle Janitor** | Hourly auto-expiry of dead drives + zombie reminder cleanup |
+| 🔗 **Same-Company Merge** | JD PDFs, form links and follow-ups converge into ONE drive per recruiter — one timeline, no duplicate alerts |
+| 💾 **Storage Guardian** | Live quota meter (512 MB Atlas tier), Telegram warning at 450 MB, checklist bulk-delete, 25-day auto-purge |
+| ✨ **Gemini Assistant** | Opt-in chat page grounded in your live drive data — enable/disable buttons, answers only from stored facts |
 | 📊 **Dashboard** | Morning briefing, urgency stats, calendar, raw message inbox, import with SSE progress |
 | 🧠 **Eligibility Profile** | Your branch/batch/CGPA → per-drive ELIGIBLE / UNCLEAR / NOT_ELIGIBLE verdicts + relevance score |
 | 🔐 **JWT Auth** | Single-admin login enforced on every data route |
@@ -123,7 +126,9 @@ npm run dev                                 # http://localhost:5173
 | `PLACEMENT_GROUP_ID` | Group the userbot listens to |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | @BotFather token + your user id (optional but recommended) |
 | `STUDENT_NAME` / `STUDENT_USN` | Hardcoded shortlist-matching identity |
-| `GEMINI_ENABLED` / `GEMINI_API_KEY` | Optional. Leave false to run fully offline |
+| `GEMINI_API_KEY` / `GEMINI_FLASH_MODEL` / `GEMINI_PRO_MODEL` | Optional. Extraction uses local NLP first; with a key present, Gemini enhances extraction, and the chat page unlocks after its own Enable press |
+| `DATA_RETENTION_DAYS` | Auto-delete messages + dead drives older than this (default `25`) |
+| `STORAGE_LIMIT_MB` / `STORAGE_WARN_MB` | Quota meter ceiling and Telegram warning line (default `512` / `450`) |
 
 ---
 
@@ -138,12 +143,59 @@ npm run dev                                 # http://localhost:5173
 | GET | `/api/opportunities/meta/briefing` | Morning briefing |
 | GET | `/api/opportunities/meta/calendar` | Calendar events |
 | PATCH | `/api/opportunities/{id}/status` | Update status |
+| GET | `/api/opportunities/messages` | Raw message inbox (+attachment download) |
 | GET | `/api/reminders` | Upcoming reminders |
 | POST | `/api/import/upload` | Historical export (SSE progress) |
+| GET/POST | `/api/storage` · `/api/storage/*/delete-bulk` · `/api/storage/purge` | Quota meter, bulk delete, purge |
+| GET | `/api/gemini/status` | Gemini chat toggle state + key presence |
+| POST | `/api/gemini/toggle` | Enable/disable the opt-in chat |
+| POST | `/api/gemini/chat` | Grounded Q&A over stored drives (429 = credits exhausted) |
 | GET | `/api/settings/profile` · `/system_config` · `/system` | Settings & health |
 | GET | `/api/health` | Public health probe |
 
 All data routes require `Authorization: Bearer <JWT>`.
+
+> 🔒 **Security posture:** credentials live only in `.env` (login is
+> fail-closed without them), Swagger/ReDoc/openapi.json are hidden unless
+> `DOCS_ENABLED=true`, and security headers are set on every response.
+> If notifications show `chat not found`, open your bot in Telegram and
+> press **START** once.
+
+### ⚠️ Run exactly ONE backend instance
+
+Telegram allows only one `getUpdates` poller per bot token. If you see
+
+```
+Conflict: terminated by other getUpdates request; make sure that only one
+bot instance is running
+```
+
+an old uvicorn/reload worker survived (this happens after Ctrl+C under
+`--reload`). Kill the strays and restart:
+
+```powershell
+# Windows — find who holds ports 8000/8001, then stop stale python processes
+Get-NetTCPConnection -State Listen | ? { $_.LocalPort -in 8000,8001 }
+Stop-Process -Id <stale_pid> -Force
+```
+
+The frontend dev server expects the API on **port 8000**
+(`frontend/src/api/client.js`); override with `VITE_API_URL` if needed.
+
+### 🚀 Deploying (production checklist)
+
+1. **Backend**: host on a persistent VM/container (Render, Railway, Fly.io,
+   or a home server) — the Telethon userbot must stay running; serverless
+   platforms will kill the long-lived Telegram session.
+2. **Frontend**: `npm run build` then serve `dist/` from Vercel/Netlify/
+   Nginx. Set `VITE_API_URL` to your backend URL **at build time**.
+3. **CORS**: set `CORS_ORIGINS='["https://your-frontend-domain"]'` in the
+   backend environment — localhost origins are only defaults.
+4. **MongoDB**: use Atlas (or self-host); keep `MONGODB_URI` secret.
+5. **Secrets**: strong `ADMIN_PASSWORD` + `JWT_SECRET`; never commit `.env`;
+   leave `DOCS_ENABLED=false`.
+6. **Telegram**: run `setup_session.py` once on the deploy machine, press
+   START on the bot from your account, and confirm the startup ping arrives.
 
 ## 💬 Telegram Bot Commands
 

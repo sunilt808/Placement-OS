@@ -106,6 +106,28 @@ async def _run_lifecycle_cleanup():
         print(f"[Scheduler] Lifecycle cleanup error: {e}")
 
 
+async def _run_retention_purge():
+    """Cloud-storage guardian: delete messages/drives past the retention window."""
+    from services.storage_service import purge_older_than
+    try:
+        summary = await purge_older_than(settings.data_retention_days)
+        if summary["opportunities_deleted"] or summary["messages_deleted"]:
+            print(f"[Scheduler] Retention purge ({summary['days']}d): "
+                  f"{summary['messages_deleted']} messages, "
+                  f"{summary['opportunities_deleted']} drives deleted")
+    except Exception as e:
+        print(f"[Scheduler] Retention purge error: {e}")
+
+
+async def _run_storage_check():
+    """Telegram warning when the database nears its free-tier quota."""
+    from services.storage_service import check_storage_and_alert
+    try:
+        await check_storage_and_alert()
+    except Exception as e:
+        print(f"[Scheduler] Storage check error: {e}")
+
+
 def start_scheduler():
     """Initialize and start the APScheduler."""
     global _scheduler
@@ -152,6 +174,20 @@ def start_scheduler():
         _run_lifecycle_cleanup,
         trigger=IntervalTrigger(hours=1),
         id="lifecycle_cleanup",
+        replace_existing=True,
+    )
+
+    # Storage guardian — daily retention purge + quota check every 6 hours
+    _scheduler.add_job(
+        _run_retention_purge,
+        trigger=CronTrigger(hour=3, minute=45, timezone=IST),
+        id="retention_purge",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        _run_storage_check,
+        trigger=IntervalTrigger(hours=6),
+        id="storage_check",
         replace_existing=True,
     )
 

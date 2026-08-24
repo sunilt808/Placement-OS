@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
+from config import settings
 from database import messages_col, opportunities_col
 from models.message import MessageIn, MessageSource
 from models.opportunity import OpportunityCategory
@@ -190,12 +191,18 @@ async def ingest_message(
                     merged = len(opp.get("source_message_ids") or []) > 1
                     if merged:
                         print(f"[Pipeline] Merged follow-up into {opp.get('company')} — no new-opportunity alert")
-                    elif extraction.category == OpportunityCategory.NEEDS_REVIEW:
-                        await send_needs_review_alert(opp, opportunity_id, text)
+                    elif not settings.auto_notify_new_opportunity:
+                        print("[Pipeline] Auto-notification disabled (AUTO_NOTIFY_NEW_OPPORTUNITY=false)")
                     else:
-                        await send_new_opportunity_alert(opp, opportunity_id)
+                        if extraction.category == OpportunityCategory.NEEDS_REVIEW:
+                            await send_needs_review_alert(opp, opportunity_id, text)
+                        else:
+                            await send_new_opportunity_alert(opp, opportunity_id)
+                        print(f"[Notify] Auto-alert delivered for NEW drive: {opp.get('company')} — {opp.get('role')}")
                 except Exception as alert_err:
-                    print(f"[Pipeline] Could not send Telegram bot alert: {alert_err}")
+                    print(f"[Pipeline] AUTO-NOTIFICATION FAILED: {alert_err}\n"
+                          f"          → If this says 'chat not found': open the bot in Telegram "
+                          f"and press START once, then verify TELEGRAM_CHAT_ID.")
 
         return opportunity_id
 

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Search, Trash2, X } from 'lucide-react';
+import api from '../api/client';
 import { getOpportunities } from '../api/client';
 import OpportunityCard from '../components/OpportunityCard';
 
@@ -8,6 +10,8 @@ export default function Opportunities() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
   
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
@@ -65,6 +69,34 @@ export default function Opportunities() {
 
   const handleStatusChange = (id, status) => {
     setOpportunities(prev => prev.map(o => o._id === id ? { ...o, status } : o));
+  };
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    if (!selected.size || deleting) return;
+    if (!window.confirm(
+      `Delete ${selected.size} drive(s)? Their timelines, reminders and stored PDFs are removed too.`
+    )) return;
+    setDeleting(true);
+    try {
+      const res = await api.post('/api/storage/opportunities/delete-bulk', {
+        ids: [...selected],
+      });
+      toast.success(`Deleted ${res.data.deleted} drive(s)`);
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -188,6 +220,22 @@ export default function Opportunities() {
         </label>
       </div>
 
+      {selected.size > 0 && (
+        <div className="bulk-bar">
+          <span><b>{selected.size}</b> selected</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => setSelected(new Set())}>
+            <X size={14} /> Clear
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={deleteSelected}
+            disabled={deleting}
+          >
+            <Trash2 size={14} /> {deleting ? 'Deleting…' : 'Delete Selected'}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="loading">
           <div className="spinner" />
@@ -197,11 +245,19 @@ export default function Opportunities() {
         <>
           <div className="opp-grid">
             {opportunities.map(opp => (
-              <OpportunityCard 
-                key={opp._id} 
-                opp={opp} 
-                onStatusChange={handleStatusChange} 
-              />
+              <div key={opp._id} className="selectable-wrap">
+                <label className="select-checkbox" title="Select for deletion">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(opp._id)}
+                    onChange={() => toggleSelect(opp._id)}
+                  />
+                </label>
+                <OpportunityCard
+                  opp={opp}
+                  onStatusChange={handleStatusChange}
+                />
+              </div>
             ))}
           </div>
           {opportunities.length === 0 && (

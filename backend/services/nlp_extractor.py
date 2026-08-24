@@ -100,6 +100,11 @@ COMPANY_BLACKLIST = {
     "software engineer", "data analyst", "intern",
     "career", "careers", "job description", "eligibility criteria",
     "all students", "interested students", "eligible students",
+    # Email/message sign-offs and greetings that are NOT companies
+    "thanks & regards", "thanks and regards", "thank & regards",
+    "best regards", "kind regards", "warm regards", "many thanks",
+    "thank you", "thanks", "regards", "dear students", "dear all",
+    "subject", "re-registration", "registration required",
 }
 
 COMPANY_NOISE_WORDS = {
@@ -131,8 +136,10 @@ def _is_valid_company_name(name: str) -> bool:
         return False
     name_lower = name.lower().strip()
     
-    # Reject if it starts with lowercase (sentences, not company names)
-    if name[0].islower():
+    # Reject if it has NO capitals at all (sentence fragments like
+    # "thanks & regards"). Camel-case brands (eInfochips, iPhone-like
+    # naming, zohoCorp) are legitimate companies and must pass.
+    if name == name.lower():
         return False
     
     # Reject if it's a blacklisted word/phrase
@@ -177,6 +184,29 @@ def _clean_company_name(name: str) -> str:
     return name
 
 
+def _company_from_subject(text: str) -> Optional[str]:
+    """
+    Highest-signal source: the message Subject line.
+
+    TPO mails/messages look like:
+        Subject: eInfochips Campus Drive – Re-Registration Required
+    The recruiter name sits right before 'Campus Drive' / 'Drive' /
+    'Placement' / 'Registration'. Returns a validated company or None.
+    """
+    for m in re.finditer(r"(?im)^\s*(?:subject|sub)\s*[:\-]\s*(.+)$", text):
+        subject = m.group(1).strip()
+        cm = re.search(
+            r"([A-Z][A-Za-z0-9&.' ]{1,40}?)\s+(?:campus\s+)?(?:"
+            r"drive|placement|hiring|recruitment|re-?registration|registration)\b",
+            subject,
+        )
+        if cm:
+            candidate = cm.group(1).strip(" -–—:,&")
+            if _is_valid_company_name(candidate):
+                return candidate
+    return None
+
+
 def extract_company_nlp(text: str) -> Optional[str]:
     """
     Extract the hiring company with deterministic local signals.
@@ -212,6 +242,11 @@ def extract_company_nlp(text: str) -> Optional[str]:
 
     if best_candidate and best_candidate[0] >= 100:
         return best_candidate[1]
+
+    # Subject line beats everything else for drive announcements
+    subject_company = _company_from_subject(text)
+    if subject_company:
+        return subject_company
 
     labelled_patterns = [
         r"(?i)\b(?:company(?:\s+name)?|organisation|organization)\s*[:\-]\s*([^\n]{2,60})",
@@ -681,9 +716,10 @@ def compute_cse_relevance_nlp(text: str, role: Optional[str], branches: Optional
         score -= min(20, len(non_cse_tech_hits) * 5)
 
     final_score = max(0, min(100, score))
+    # Recall-first: only explicit non-CSE evidence marks a drive irrelevant
     return {
         "score": final_score,
-        "is_relevant": final_score >= 50,
+        "is_relevant": final_score >= 50 or not bool(non_cse_tech_hits),
         "signals": signals,
     }
 

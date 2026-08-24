@@ -49,8 +49,18 @@ async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mo
     try:
         return await _post(payload)
     except httpx.HTTPStatusError as e:
+        body = ""
+        if e.response is not None:
+            body = e.response.text[:200]
+            if e.response.status_code == 400 and "chat not found" in body.lower():
+                print(
+                    "[Notify] CHAT NOT FOUND - open Telegram, search for the bot, "
+                    "press START once, and confirm TELEGRAM_CHAT_ID matches your "
+                    "numeric user id from @userinfobot."
+                )
+                raise
         if e.response is not None and e.response.status_code == 400 and parse_mode:
-            print(f"[Notify] HTML parse rejected (400) — retrying as plain text")
+            print("[Notify] HTML parse rejected (400) - retrying as plain text")
             fallback = dict(payload)
             fallback["parse_mode"] = None
             import re as _re
@@ -246,4 +256,26 @@ async def send_import_complete(stats: dict):
 🔁 Duplicates merged: {stats.get('duplicates', 0)}
 ⚫ Possible missed: {stats.get('missed', 0)}"""
 
+    await _send_message(text)
+
+
+async def send_storage_alert(used_mb: float, limit_mb: int, percent: float,
+                             collections: dict | None = None):
+    """Cloud-storage warning when nearing the free-tier quota."""
+    top = ""
+    if collections:
+        ranked = sorted(collections.items(),
+                        key=lambda kv: kv[1].get("mb", 0), reverse=True)[:3]
+        top = "\n".join(
+            f"• {name}: {v.get('mb', 0)} MB ({v.get('count', 0)} docs)"
+            for name, v in ranked)
+        top = f"\n<b>Heaviest collections</b>\n{top}\n"
+    text = (
+        "💾 <b>STORAGE WARNING</b>\n\n"
+        f"Database: <b>{used_mb} MB / {limit_mb} MB</b> ({percent}%)\n"
+        f"{top}\n"
+        "Open the app and delete old drives/messages, or wait for the "
+        f"{getattr(__import__('config').settings, 'data_retention_days', 25)}"
+        "-day auto-purge to clear stale data."
+    )
     await _send_message(text)

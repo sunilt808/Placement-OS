@@ -75,3 +75,7 @@ backend/data/documents/
 # Local scratch notes (keep strps.txt + README tracked)
 scratch/
 todo.local.md
+
+# Runtime logs + deploy artifacts
+backend/logs/
+.vercel/

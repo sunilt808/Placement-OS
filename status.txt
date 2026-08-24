@@ -267,3 +267,34 @@ authentication (G2/G3), an incomplete dependency manifest (G4), a
 pagination defect (G5), docs that promise features that don't exist
 (G7), and repo/build hygiene (G8-G10). Do Phase A before anything else.
 ========================================================================
+
+========================================================================
+UPDATE - 24 AUG 2026 (post-hardening round)
+========================================================================
+RESOLVED SINCE LAST REVIEW
+ G1  ai_service NameError            -> fixed (import re)
+ G2/G3 auth decorative               -> JWT enforced on ALL routers,
+                                        fail-closed login, secrets only
+                                        from .env, hardcoded creds removed
+ G4  requirements incomplete         -> PyJWT/openpyxl/pytesseract/Pillow
+ G5  urgency pagination              -> fixed
+ G7  README fiction                  -> rewritten to match reality
+ NEW COMPLETED: Excel shortlist finder (USN scan), role-first CSE engine,
+ Google Form detection, image OCR path, lifecycle janitor, public landing
+ page, API docs hidden by default (DOCS_ENABLED), same-company merge
+ (Layer 1.5), no re-alert on merged follow-ups, watchdog self-heal.
+
+NEW / OPEN GAPS
+ G11 Tesseract binary not installed  -> OCR silently no-ops until installed
+ G12 Free-tier sleep vs userbot      -> needs cron-job.org pinger when hosted
+ G13 .ics export / triage mode /
+     analytics page / PWA            -> planned, not started
+ G14 Nested backend/.git + stale
+     debug scripts in root           -> repo hygiene pending
+ G15 Old README leaked real creds    -> rotate Telegram password/2FA if the
+                                        leaked values were ever real
+ G16 Company extraction long-tail    -> rare junk still possible ("CTC");
+                                        backfill script exists, rerun anytime:
+                                        python scripts/backfill_companies.py
+ G17 Atlas has no automatic backups   -> export monthly manually
+========================================================================

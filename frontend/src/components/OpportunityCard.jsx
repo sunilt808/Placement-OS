@@ -40,6 +40,13 @@ const URGENCY_BORDER = {
   NO_DEADLINE:   'var(--border-strong)',
 };
 
+const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function isFresh(opp) {
+  const ts = opp.telegram_message_date || opp.created_at;
+  return ts ? Date.now() - new Date(ts).getTime() < NEW_WINDOW_MS : false;
+}
+
 export default function OpportunityCard({ opp, onStatusChange }) {
   const navigate = useNavigate();
   const urgency = opp.deadline_urgency;
@@ -48,6 +55,7 @@ export default function OpportunityCard({ opp, onStatusChange }) {
   const confidence = Math.round((opp.confidence || 0) * 100);
   const companyDisplay = opp.company || 'Unknown Company';
   const isUnknown = !opp.company;
+  const fresh = isFresh(opp);
 
   const handleApply = async (e) => {
     e.stopPropagation();
@@ -73,7 +81,7 @@ export default function OpportunityCard({ opp, onStatusChange }) {
 
   return (
     <div
-      className="opp-card fade-in"
+      className={`opp-card fade-in${fresh ? ' is-new' : ''}`}
       style={{ '--accent-color': accentColor }}
       onClick={() => navigate(`/opportunities/${opp._id}`)}
     >
@@ -108,7 +116,12 @@ export default function OpportunityCard({ opp, onStatusChange }) {
             )}
           </div>
         </div>
-        <StatusBadge status={opp.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {fresh && (
+            <span className="new-flag" title="Posted within the last 24 hours">NEW</span>
+          )}
+          <StatusBadge status={opp.status} />
+        </div>
       </div>
 
       {/* ── Key Info Row ─────────────────────────── */}
@@ -161,7 +174,11 @@ export default function OpportunityCard({ opp, onStatusChange }) {
           <UrgencyBadge urgency={urgency} />
           {opp.cse_relevance_score !== undefined && (
             <span className={`badge ${opp.is_cse_relevant ? 'badge-applied' : 'badge-not-applied'}`}>
-              {opp.is_cse_relevant ? `✅ CSE ${opp.cse_relevance_score}%` : '❌ Not CSE'}
+              {opp.role_class === 'NOT_CSE'
+                ? '❌ Not CSE'
+                : opp.is_cse_relevant
+                  ? `✅ CSE ${opp.cse_relevance_score}%`
+                  : '❓ Unclassified'}
             </span>
           )}
           <span className="confidence" title="Extraction Confidence">AI: {confidence}%</span>

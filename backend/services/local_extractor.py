@@ -218,7 +218,10 @@ def compute_cse_relevance(text: str, role: Optional[str], branches: Optional[Lis
 
     # Clamp to 0–100
     final_score = max(0, min(100, score))
-    is_relevant = final_score >= 50
+    # Recall-first: a drive is only NON-CSE with explicit negative evidence
+    # (non-CSE branches/tech). Weak signals mean UNKNOWN, never excluded.
+    explicit_non_cse = bool(non_cse_tech_hits)
+    is_relevant = final_score >= 50 or not explicit_non_cse
 
     return {
         "score": final_score,

@@ -26,7 +26,7 @@ _pro_model = None
 try:
     import google.generativeai as genai
     from google.generativeai.types import GenerationConfig
-    if (settings.gemini_enabled and settings.gemini_api_key
+    if (settings.gemini_api_key
             and settings.gemini_api_key != "YOUR_GEMINI_API_KEY"):
         genai.configure(api_key=settings.gemini_api_key)
         _flash_model = genai.GenerativeModel(settings.gemini_flash_model)

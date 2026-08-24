@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { getStats, getOpportunities } from '../api/client';
 import api from '../api/client';
 import OpportunityCard from '../components/OpportunityCard';
-import { Sparkles, BarChart2, Bell, CheckCircle, Clock } from 'lucide-react';
+import { Sparkles, BarChart2, Bell, CheckCircle, Clock, HardDrive } from 'lucide-react';
 
 const URGENCY_SECTIONS = [
   {
@@ -54,21 +55,38 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [briefing, setBriefing] = useState(null);
+  const [storage, setStorage] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showOnlyEligible, setShowOnlyEligible] = useState(false);
   const [showExpired, setShowExpired] = useState(false);
+  const knownIds = useRef(null);
 
   const load = async () => {
     try {
-      const [s, o, b] = await Promise.all([
+      const [s, o, b, st] = await Promise.all([
         getStats(),
         getOpportunities({ limit: 100 }),
-        api.get('/api/opportunities/meta/briefing').then(r => r.data).catch(() => null)
+        api.get('/api/opportunities/meta/briefing').then(r => r.data).catch(() => null),
+        api.get('/api/storage').then(r => r.data).catch(() => null),
       ]);
       setStats(s);
       setBriefing(b);
-      setOpportunities(o.opportunities || []);
+      setStorage(st);
+      const list = o.opportunities || [];
+
+      if (knownIds.current) {
+        const fresh = list.filter((x) => !knownIds.current.has(x._id));
+        fresh.slice(0, 3).forEach((opp) =>
+          toast.success(
+            `🆕 New drive: ${opp.company || 'Unknown company'} — ${opp.role || 'role TBD'}`,
+            { duration: 6000 }
+          )
+        );
+        if (fresh.length > 3) toast.success(`🆕 +${fresh.length - 3} more new drives`, { duration: 6000 });
+      }
+      knownIds.current = new Set(list.map((x) => x._id));
+      setOpportunities(list);
     } catch (e) {
       console.error(e);
     } finally {
@@ -187,6 +205,31 @@ export default function Dashboard() {
             </div>
             <div className="stat-icon green"><CheckCircle size={24} /></div>
           </div>
+        </div>
+      )}
+
+      {/* ── Cloud-Storage Guardian ── */}
+      {storage && (
+        <div className={`storage-bar ${storage.should_warn ? 'warn' : ''}`}>
+          <div className="storage-info">
+            <HardDrive size={16} />
+            <span>
+              Cloud storage: <b>{storage.used_mb} MB</b> / {storage.limit_mb} MB
+              {storage.should_warn && ' — cleanup advised (auto-delete runs at 25 days)'}
+            </span>
+          </div>
+          <div className="storage-track">
+            <div
+              className="storage-fill"
+              style={{
+                width: `${Math.min(100, storage.percent)}%`,
+                background: storage.should_warn
+                  ? 'linear-gradient(90deg, var(--orange), #ef4444)'
+                  : undefined,
+              }}
+            />
+          </div>
+          <span className="storage-pct">{storage.percent}%</span>
         </div>
       )}
 

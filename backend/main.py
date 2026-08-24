@@ -10,6 +10,7 @@ from config import settings
 from database import connect_db, close_db, ensure_indexes
 from scheduler import start_scheduler, stop_scheduler
 from api.routes import opportunities, import_, reminders, settings as settings_router
+from api.routes import storage as storage_router, gemini as gemini_router
 from api.routes.auth import router as auth_router
 
 @asynccontextmanager
@@ -26,6 +27,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Main] Userbot error: {e}")
 
+    if settings.startup_ping and settings.telegram_bot_token and settings.telegram_chat_id:
+        async def _startup_ping():
+            try:
+                from services.notification_service import _send_message
+                await _send_message(
+                    "🟢 <b>PlacementOS is online</b> — auto-notifications are active. "
+                    "You'll be alerted here the moment a new drive drops."
+                )
+                print("[Main] Startup ping delivered — notification channel OK")
+            except Exception as e:
+                print(f"[Main] STARTUP PING FAILED: {e}\n"
+                      f"       → Auto-notifications will NOT arrive until this is fixed.\n"
+                      f"       → Open the bot in Telegram, press START, then verify "
+                      f"TELEGRAM_CHAT_ID in .env matches your numeric user id.")
+        asyncio.create_task(_startup_ping())
+
     bot_app = None
     if settings.telegram_bot_token and settings.telegram_chat_id:
         try:
@@ -36,6 +53,7 @@ async def lifespan(app: FastAPI):
             await bot_app.updater.start_polling(drop_pending_updates=True)
         except Exception as e:
             print(f"[Main] Telegram bot error: {e}")
+            bot_app = None
     else:
         print("[Main] Telegram bot not configured — continuing without notifications.")
 
@@ -47,11 +65,11 @@ async def lifespan(app: FastAPI):
         userbot_task.cancel()
     if bot_app:
         try:
-            await bot_app.updater.stop()
-            await bot_app.stop()
-            await bot_app.shutdown()
-        except:
-            pass
+            await asyncio.wait_for(bot_app.updater.stop(), timeout=10)
+            await asyncio.wait_for(bot_app.stop(), timeout=10)
+            await asyncio.wait_for(bot_app.shutdown(), timeout=10)
+        except Exception as e:
+            print(f"[Main] Bot shutdown note: {e}")
     await close_db()
 
 app = FastAPI(
@@ -94,6 +112,8 @@ app.include_router(opportunities.router)
 app.include_router(import_.router)
 app.include_router(reminders.router)
 app.include_router(settings_router.router)
+app.include_router(storage_router.router)
+app.include_router(gemini_router.router)
 
 apply_docs_policy(app)
 

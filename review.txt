@@ -23,3 +23,44 @@
 - **.gitignore**: Standardized for Python/Node/Environment variables to keep the repo clean.
 
 Status: **ALL SYSTEMS NOMINAL. READY FOR DEPLOYMENT.**
+
+---
+
+# REVIEW UPDATE - 24 AUG 2026 (live-incident + hardening round)
+
+## Incident: "backend failing / no new data"
+- Root cause chain: (a) uvicorn --reload worker died during edits while the
+  parent kept port 8000 -> zombie listener; (b) backend was fully DOWN over
+  the weekend, so nothing was tracked Fri 18:44 -> Mon; (c) browser held a
+  stale JWT that is now invalid by design.
+- Fix: stable start without --reload (logs in backend/logs/), 4-day
+  catch-up scan backfilled ~50 messages, watchdog now self-heals the
+  "connected but deaf" case after 2x interval.
+
+## Notifications were silently failing
+- Telegram API returned `400 chat not found` on EVERY send. Bot token is
+  valid (@sunil_placement_bot) but the target chat was never started.
+- USER ACTION REQUIRED: open @sunil_placement_bot in Telegram and press
+  START once; confirm TELEGRAM_CHAT_ID equals your @userinfobot id.
+- Code now prints an explicit hint when this happens + plain-text retry
+  fallback for HTML parse errors.
+
+## Company-name quality (user-reported)
+- "Thanks & Regards" was extracted as a company for the eInfochips drive;
+  camelCase brands (eInfochips) were rejected by the validator entirely.
+- Fixed: sign-off/greeting blacklist, Subject-line pattern
+  (`Subject: <Company> Campus Drive ...`), lowercase-start rule replaced by
+  no-capitals rule. Backfill repaired 14 live drives incl. Salesforce,
+  HCLTech, SAP, Infrrd, eInfochips. Rerun anytime:
+  python scripts/backfill_companies.py
+
+## Verification state
+- Backend test suite: 28/28 PASS (adds company-artifact e2e, endpoint auth,
+  docs-hiding, extractor regressions). Frontend builds clean.
+- Live server: health OK, userbot connected, Swagger/OpenAPI return 404.
+
+## Answers to open questions
+- Live PDF tracking: YES - userbot routes documents/photos/spreadsheets in
+  real time AND history scans cover downtime windows.
+- "Not CSE" badge: was driven by weak-score boolean; now only explicit
+  non-CSE evidence shows Not CSE, otherwise Unclassified (recall first).

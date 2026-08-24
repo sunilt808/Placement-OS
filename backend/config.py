@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     message_retention_days: int = 3
     expiry_grace_hours: int = 12      # Janitor: deadline passed this long -> EXPIRED
 
+    # ── Auto-notifications ────────────────────────────────────────────────────
+    auto_notify_new_opportunity: bool = True   # Telegram ping on every NEW drive
+    startup_ping: bool = True                  # delivery self-test on boot
+
+    # ── Cloud-storage guardian (Atlas M0 free tier ~512 MB) ───────────────────
+    data_retention_days: int = 25     # auto-delete messages/opps older than this
+    storage_limit_mb: int = 512       # provider quota
+    storage_warn_mb: int = 450        # Telegram warning threshold
+
     # ── Student identity (hardcoded shortlist matching) ───────────────────────
     student_name: str = "Sunil T"
     student_usn: str = "1DS24CS421"
