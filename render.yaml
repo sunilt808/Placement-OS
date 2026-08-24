@@ -30,7 +30,7 @@ services:
       - key: JWT_SECRET
         sync: false            # NEW strong value, not the dev one
       - key: CORS_ORIGINS
-        value: '["https://placement-os-rust.vercel.app"]'
+        value: '["http://localhost:5173","https://placement-os-rust.vercel.app"]'
       - key: DOCS_ENABLED
         value: "false"
 
