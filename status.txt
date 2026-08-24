@@ -129,9 +129,8 @@ G2. NO AUTHORIZATION ON DATA APIs. auth.py issues JWTs, but none of
     delete opportunities, upload arbitrary files, change the profile.
     Login page is theater, not security.
 G3. Secrets hygiene: auth.py falls back to hardcoded credentials
-    (sunil / Sunil@369 / 48411 / super-secret-key-369) AND README.md
-    publishes those same real-looking values in its example .env block.
-    Any repo push leaks working credentials.
+    (real values redacted — username/password/security-code/JWT secret
+    were all published verbatim). Any repo push leaks working credentials.
 G4. requirements.txt is MISSING PyJWT while api/routes/auth.py does
     `import jwt`. Works on this machine only because it was pip-installed
     ad hoc; fresh install => backend crashes on first request.

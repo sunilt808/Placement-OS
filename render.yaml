@@ -1,0 +1,53 @@
+# Render Blueprint — PlacementOS backend
+# Deploy: render.com → New + → Blueprint → pick this repo.
+# Every `sync: false` var must be filled in the Render dashboard after import.
+services:
+  - type: web
+    name: placementos-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python -m spacy download en_core_web_sm
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+      # ── Database (Atlas) ──────────────────────────────────────────────────
+      - key: MONGODB_URI
+        sync: false            # mongodb+srv://user:pass@cluster0.../placement_monitor
+      - key: MONGODB_DB
+        value: placement_monitor
+
+      # ── Auth / CORS ───────────────────────────────────────────────────────
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false            # use a NEW strong value for cloud (not dev)
+      - key: ADMIN_SECURITY_CODE
+        sync: false
+      - key: JWT_SECRET
+        sync: false            # NEW strong value, not the dev one
+      - key: CORS_ORIGINS
+        sync: false            # JSON list incl. your Vercel URL
+      - key: DOCS_ENABLED
+        value: "false"
+
+      # ── Telegram ──────────────────────────────────────────────────────────
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: TELEGRAM_SESSION_STRING
+        sync: false
+      - key: PLACEMENT_GROUP_ID
+        sync: false
+
+      # ── Gemini (optional) ─────────────────────────────────────────────────
+      - key: GEMINI_API_KEY
+        sync: false
