@@ -86,9 +86,6 @@ placement-tracker/
 
 ## 🚀 Quick Start (PC)
 
-Full step-by-step guide (PC + mobile + free hosting deployment): see
-**[`strps.txt`](strps.txt)**.
-
 ```bash
 # 1. Backend
 cd backend

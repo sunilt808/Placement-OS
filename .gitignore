@@ -38,7 +38,22 @@ venv.bak/
 
 # Cloud onboarding credential files (never commit)
 atlas-credentials.env
-*credentials*.env
+*credentials*
+
+# Secrets / keys / certs (defense in depth)
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets*
+serviceAccountKey*.json
+auth_config*
+
+# Personal notes & scratch text files (never commit)
+*.txt
+!backend/requirements.txt
 
 # Virtual Environment (.venv variant)
 .venv/
@@ -81,7 +96,7 @@ logs/
 # Runtime source documents downloaded from placement messages
 backend/data/documents/
 
-# Local scratch notes (keep strps.txt + README tracked)
+# Local scratch notes
 scratch/
 todo.local.md
 
