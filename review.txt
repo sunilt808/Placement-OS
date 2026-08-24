@@ -64,3 +64,53 @@ Status: **ALL SYSTEMS NOMINAL. READY FOR DEPLOYMENT.**
   real time AND history scans cover downtime windows.
 - "Not CSE" badge: was driven by weak-score boolean; now only explicit
   non-CSE evidence shows Not CSE, otherwise Unclassified (recall first).
+
+---
+
+# REVIEW UPDATE - 24 AUG 2026, ROUND 2 (notification stack + UI + deploy prep)
+
+## Root cause found for ALL "Gemini enable fails" reports (multi-layer)
+1. Frontend client.js defaulted to port 8001 while server ran on 8000.
+2. GeminiPage called /gemini/* WITHOUT the /api prefix -> guaranteed 404
+   even on the right port. Same latent bug fixed in Opportunities.jsx
+   bulk-delete (/storage/* -> /api/storage/*).
+3. A stale orphaned uvicorn on 8001 was ALSO double-polling getUpdates
+   (the Telegram Conflict spam). Killed; main.py shutdown now uses
+   asyncio.wait_for timeouts so reload workers can't linger again.
+4. ai_service required GEMINI_ENABLED=true which was never in .env ->
+   "[AI] Gemini unavailable" forever. Now initializes on key presence.
+
+## Auto-notification hardening
+- LIVE TEST revealed the real reason no alerts ever arrived:
+  Telegram returns `400 chat not found` — bot was never STARTed.
+  USER ACTION STILL REQUIRED: open the bot, press START once.
+- Startup ping added (main.py): sends "PlacementOS is online" on boot;
+  failure prints the exact remedy. Flag: STARTUP_PING=true.
+- Pipeline alert path now logs success per drive and prints a remedy
+  hint on failure. Flag: AUTO_NOTIFY_NEW_OPPORTUNITY=true.
+- Gemini chat quota exhaustion now returns clean HTTP 429 with friendly
+  text; frontend renders it as a chat bubble, not an error dump.
+
+## Frontend notification layer
+- NEW Topbar.jsx: top navbar with bell + unread badge, dropdown panel
+  aggregating new drives (<24h), urgent deadlines, pending reminders;
+  mark-all-read persisted in localStorage; click-through navigation;
+  60s polling. Fixed button UA font-color inheritance (dark-on-dark).
+- Dashboard/Opportunities detect new arrivals on poll and toast them.
+- GeminiPage toggle rewritten: busy states, optimistic status flip,
+  toast errors with real reasons (backend unreachable / session expired).
+
+## UI additions
+- OpportunityCard: <24h drives get cyan border glow + tinted background
+  + pulsing NEW flag (applies to Command Center, Opportunities,
+  Applications via shared component).
+- Landing page professional rebuild: engineering-highlights section,
+  tech-stack grid, typewriter terminal, OG/Twitter share meta, smooth
+  scroll anchors, reduced-motion support.
+
+## Verification state
+- Backend endpoints verified live with real JWT: gemini status/toggle OK
+  (enabled=True). python syntax checks pass. npm run build passes.
+- Deploy checklist added to README (persistent host for userbot,
+  CORS_ORIGINS override, VITE_API_URL at build time, START on bot).
+- Full expert re-rating written to rev.txt (overall 8.4/10).

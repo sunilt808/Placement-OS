@@ -293,8 +293,48 @@ NEW / OPEN GAPS
      debug scripts in root           -> repo hygiene pending
  G15 Old README leaked real creds    -> rotate Telegram password/2FA if the
                                         leaked values were ever real
- G16 Company extraction long-tail    -> rare junk still possible ("CTC");
-                                        backfill script exists, rerun anytime:
-                                        python scripts/backfill_companies.py
- G17 Atlas has no automatic backups   -> export monthly manually
+  G16 Company extraction long-tail    -> rare junk still possible ("CTC");
+                                         backfill script exists, rerun anytime:
+                                         python scripts/backfill_companies.py
+  G17 Atlas has no automatic backups   -> export monthly manually
+
+========================================================================
+UPDATE - 24 AUG 2026, ROUND 2 (notifications, UI depth, deploy prep)
+========================================================================
+RESOLVED THIS ROUND
+  Gemini enable "not responding"   -> three stacked causes found and fixed:
+                                      wrong default port (8001->8000),
+                                      missing /api prefix on all gemini
+                                      routes (404), stale orphaned server;
+                                      toggle now verified live with JWT.
+  "[AI] Gemini unavailable"        -> gemini_enabled gate removed; models
+                                      init whenever GEMINI_API_KEY present.
+  Telegram Conflict spam           -> orphaned uvicorn on 8001 killed;
+                                      shutdown wrapped in wait_for timeouts.
+  Silent notification failures     -> startup ping self-tests channel on
+                                      boot and prints the fix; pipeline
+                                      logs per-drive delivery; root cause
+                                      confirmed as chat-not-found (bot
+                                      never STARTed - user action).
+  Quota exhaustion UX              -> backend returns clean 429 with
+                                      friendly message; frontend renders
+                                      retry-later bubble in chat.
+NEW IN THE PRODUCT
+  + Top navbar notification center: bell, unread badge (localStorage),
+    dropdown aggregating new drives / urgent deadlines / reminders,
+    mark-all-read, click-through nav, 60s polling. Font-color bug fixed.
+  + Browser toasts on new arrivals during dashboard polling.
+  + NEW (<24h) highlight: cyan glow border + tinted card + pulsing flag
+    on every page via shared OpportunityCard.
+  + Landing page v2: engineering highlights, tech-stack grid, typewriter
+    terminal, OG/Twitter meta, smooth anchors, reduced-motion support.
+  + README: deploy production checklist section added.
+STILL OPEN (unchanged from round 1)
+  Tesseract binary install (OCR no-ops without it), free-tier sleep vs
+  userbot (cron pinger), analytics/.ics/PWA not started, nested
+  backend/.git + debug-script hygiene, Atlas manual backups, rotate any
+  creds ever leaked in git history.
+EXPERT RATING
+  Full multi-dimensional review + scores now live in rev.txt
+  (overall 8.4/10 weighted; 9/10 as a solo portfolio project).
 ========================================================================

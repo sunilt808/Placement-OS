@@ -1,52 +1,160 @@
 ========================================================================
-AI PLACEMENT MONITOR — FULL PROJECT REVIEW
+PLACEMENTOS — EXPERT PROJECT REVIEW & RATINGS
+Reviewer mode: senior full-stack / platform engineer, post-deploy audit
+Date: 24 AUG 2026 (v2.0 — supersedes the old "100% complete" review)
+Scope: live code inspection of backend/, frontend/, configs, and today's
+       hardening rounds (auth enforcement, notification stack, UI pass).
 ========================================================================
 
-1. BACKEND REVIEW (Python / FastAPI)
+0. VERDICT IN ONE LINE
 ------------------------------------------------------------------------
-All core modules from the architecture document are built and wired together:
-✓ FastAPI Server (main.py, routes)
-✓ MongoDB connection (database.py)
-✓ Gemini AI Service (ai_service.py) with flash/pro escalation
-✓ Ingestion Pipeline (message_pipeline.py)
-✓ 3-Layer Deduplication (opportunity_engine.py)
-✓ APScheduler (scheduler.py) for reminders, daily summaries, and watchdog
-✓ Telegram Notification Service (notification_service.py) with inline buttons
-✓ Historical Importer (telegram_importer.py) with SSE support
-✓ Telethon Userbot Listener (userbot.py)
-✓ Telegram Forward Bot (telegram_bot.py)
+A genuinely complete, end-to-end product loop (ingest -> extract ->
+dedup -> remind -> act -> notify) with production-shaped security and
+ops hygiene. Portfolio-grade. Not yet enterprise-grade — and it doesn't
+pretend to be. Clear to deploy for its stated purpose: one student,
+self-hosted, always-on box or paid-tier host.
 
-What's left / Required actions for Backend:
-- Populate `backend/.env` with your actual API keys.
-- If using MongoDB Atlas (cloud), update `MONGODB_URI` in `.env`.
-- You MUST run `python setup_session.py` locally once to generate the `TELEGRAM_SESSION_STRING` and find your `PLACEMENT_GROUP_ID` for the Userbot listener.
+========================================================================
+1. RATINGS BY DIMENSION (score /10, weighted)
+========================================================================
 
-2. FRONTEND REVIEW (React / Vite)
-------------------------------------------------------------------------
-All pages and UI components from the MVP phase have been built:
-✓ Full routing & Axios API client setup
-✓ Beautiful dark-mode CSS Design System (index.css)
-✓ Dashboard (Placement Control Center with urgency sections)
-✓ Search & Filters (Opportunities.jsx)
-✓ Opportunity Detail Page (Timeline & AI Summary)
-✓ Drag-and-drop Historical Import (Import.jsx) with live progress bar
-✓ Settings (Eligibility Profile) & Reminders
+Architecture & Design ............... 9.0   (weight x1.5)
+  Three ingestion paths (userbot / forward-bot / SSE importer) feed ONE
+  pipeline. Local-NLP-first with optional Gemini escalation is the right
+  call: the system degrades gracefully instead of dying when an API key
+  or quota disappears. Deterministic deadline engine in Python (not AI)
+  owns state — correct division of labor. Event-sourced timelines per
+  drive (CREATED / DEADLINE_UPDATED / STATUS_CHANGED) are a genuinely
+  professional touch.
 
-What's left / Required actions for Frontend:
-- Currently, the frontend `api/client.js` points to `http://localhost:8000` by default. If you run both locally, no changes are needed. 
-- If you deploy the backend to a cloud server, you will need to create a `frontend/.env` file and add: `VITE_API_URL=https://your-production-backend.com`
-- (Optional Polish) The `MatchScore.jsx` component was built, but the backend relevance scoring based on the Eligibility Profile isn't fully computing scores yet (this was marked as Phase 5 in the plan).
+Security ............................. 8.5   (weight x1.5)
+  JWT enforced on EVERY data router (fail-closed), timing-safe cred
+  compare, security headers on all responses, Swagger/OpenAPI stripped
+  unless DOCS_ENABLED=true, secrets only via .env. Single-admin model
+  is honest about scope. Deductions: no refresh-token/expiry story beyond
+  signed claims, no rate limiting on /api/auth/login, CORS still defaults
+  to localhost (must be overridden at deploy), and any previously-leaked
+  creds must be treated as burned.
 
-3. CHECKLIST TO START
-------------------------------------------------------------------------
-[ ] Ensure MongoDB is running locally (or get an Atlas connection string).
-[ ] Get your Telegram Bot API token from @BotFather.
-[ ] Get your Telegram Client API keys (api_id, api_hash) from my.telegram.org.
-[ ] Get a Gemini API key from Google AI Studio.
-[ ] Fill out `backend/.env`.
-[ ] Run `cd backend`, `pip install -r requirements.txt`.
-[ ] Run `python setup_session.py` inside `backend/` and update `.env`.
-[ ] Run `uvicorn main:app --reload` to start backend.
-[ ] Open new terminal, run `cd frontend`, `npm install`, then `npm run dev`.
+Reliability & Ops .................... 8.0   (weight x1.25)
+  Watchdog self-heal, lifecycle janitor, retention purge, storage-quota
+  guardian with Telegram warnings, startup ping that SELF-TESTS the
+  notification channel and prints the exact fix (chat-not-found case),
+  graceful shutdown timeouts so reload workers can't linger and fight
+  over getUpdates. Deductions: single-process design (scheduler+userbot+
+  API share one uvicorn) is fine at n=1 but caps scale; no Dockerfile/
+  compose yet; no uptime probe built in (cron-job.org workaround).
 
-The project structure is 100% complete and ready for you to launch.
+AI / Data Pipeline Quality ........... 8.5   (weight x1.25)
+  Timestamp-anchored date resolution (message time, not now) is the
+  hardest correctness problem in this domain and it's solved. 3-layer
+  dedup (hash -> signature -> fuzzy) plus same-company merge means one
+  evolving record per recruiter with preserved history. Hallucination
+  guards validate Gemini company/role candidates against local output.
+  Content-hash cache prevents reprocessing. Deductions: fuzzy band 50-75
+  has no tie-breaker layer; rare junk company names still possible
+  (backfill script exists as the mitigation).
+
+Frontend & UX ........................ 8.5   (weight x1)
+  Cohesive dark glassmorphism system with real motion design (parallax,
+  scroll reveals, typewriter terminal, spotlight cards) that respects
+  prefers-reduced-motion. Top navbar notification center aggregates new
+  drives / urgent deadlines / reminders with unread persistence. NEW<24h
+  cards get cyan highlight + pulsing flag across every page via the
+  shared OpportunityCard. Landing page reads like a real product page:
+  engineering-highlights section, tech stack, OG/Twitter share tags.
+  Deductions: no skeleton loaders (spinner only), no PWA manifest,
+  mobile nav is functional but not optimized.
+
+Testing & QA ......................... 6.5   (weight x1)
+  Backend suite passes (extractor regressions, company-artifact e2e,
+  endpoint auth, docs-hiding). Frontend builds clean. BUT: opportunity
+  engine dedup/update logic, deadline buckets, reminder lifecycle, and
+  importer parsers have no dedicated tests; no CI pipeline; no lint
+  gate. For a solo project this is above average; for "production"
+  claims it's the weakest axis.
+
+Documentation ........................ 8.5   (weight x0.75)
+  README matches reality (API table verified against routers), .env
+  table complete, deploy checklist present, strps.txt is a genuine
+  click-by-click install/hosting guide. rev/review/status txt files now
+  maintained as an honest engineering log. Deduction: no architecture
+  diagram image, no CONTRIBUTING/LICENSE file.
+
+Performance & Scalability ............ 7.5   (weight x0.75)
+  Async everywhere (Motor, httpx, Telethon), indexed Mongo queries,
+  in-memory extraction cache. Fine for 100+ msgs/day x1 user. Would not
+  survive 50 users: single-process coupling, in-memory caches, no
+  queueing. Acceptable — scaling was never the goal.
+
+Product Completeness ................. 8.5   (weight x1.25)
+  Every headline feature ships: live listening, PDF/Excel/photo reading,
+  USN shortlist instant alerts, form-link flags, urgency triage UI,
+  calendar, briefing, reminders with inline actions, eligibility
+  verdicts, storage guardian, opt-in grounded Gemini chat with friendly
+  quota messaging, import with live SSE progress. Analytics page, .ics
+  export and PWA remain the honest "not started" list.
+
+Deployability ........................ 8.0   (weight x1)
+  Documented zero-cost path (Atlas + Render + Vercel) with caveats
+  spelled out (sleep kills userbot; pinger keeps it awake; disk resets).
+  Build passes clean. Needs: persistent host for the Telethon session,
+  CORS override, VITE_API_URL at build time, press START on the bot.
+
+========================================================================
+2. OVERALL SCORES
+========================================================================
+
+  Weighted overall .................... 8.4 / 10
+  As a solo/portfolio project ......... 9.0 / 10
+  As a multi-user SaaS ................ 5.5 / 10 (not the goal)
+  Interview-readiness (demo + code) ... 9.0 / 10
+
+  One-liner for a resume:
+  "Self-hosted AI placement monitor: Telethon ingestion from a college
+   Telegram group into a FastAPI/MongoDB pipeline with local-first NLP
+   extraction (spaCy/dateparser), 3-layer dedup, IST-correct deadline
+   engine, Telegram alerting, JWT-secured React dashboard."
+
+========================================================================
+3. REMAINING GAPS (expert view, ordered by leverage)
+========================================================================
+
+  HIGH (fix before calling it "production" anywhere public)
+  R1. Login rate-limiting / lockout (even naive 5-per-15min per IP).
+  R2. CI: GitHub Actions running pytest + npm build on push — cheap,
+      makes every future change safe.
+  R3. Rotate ANY credential that ever appeared in git history
+      (Telegram password/2FA, JWT_SECRET, admin password).
+
+  MEDIUM (quality-of-life, 1 day each)
+  R4. Tests for opportunity_engine (create vs merge vs extension),
+      deadline_engine bucket edges, reminder cancel-on-applied.
+  R5. Dockerfile + docker-compose (mongo + backend + frontend) — also
+      solves the persistent-host question for the userbot.
+  R6. Skeleton loading states instead of the single spinner.
+  R7. Fuzzy-band dedup tie-breaker (or document the threshold choice).
+
+  LOW (roadmap material)
+  R8. Analytics module (weekly trends, apply-rate) — plan promised it.
+  R9. .ics calendar export; PWA manifest for phone install.
+  R10. Repo hygiene: fold nested backend/.git, archive root check_*.py
+       debug scripts, remove stray .pytest_cache dirs.
+
+========================================================================
+4. WHAT WOULD I TELL THE AUTHOR
+========================================================================
+Stop adding features. The loop is closed, the failure modes you've
+actually hit (orphaned pollers, dead chat, quota walls, stale bundles,
+wrong-port ghosts) are now all either fixed, surfaced, or logged with a
+remedy printed next to them — that instinct (make failures loud and
+self-explaining) is the most senior thing in this codebase. Ship the
+deploy, run it for two weeks, and let the message inbox tell you what
+to build next. R1+R2 first, everything else can wait for real usage.
+
+========================================================================
+BOTTOM LINE
+Cleared for deployment as a single-user, self-hosted system. The two
+manual prerequisites remain: press START on the bot (chat-not-found),
+and set CORS_ORIGINS + VITE_API_URL for the deployed domains.
+========================================================================

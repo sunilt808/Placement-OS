@@ -65,7 +65,9 @@ STEP 3 — Environment file
               Telegram Web, the URL ends like #-1234567890;
               that number (with minus) is the group id
           STUDENT_NAME=Sunil T , STUDENT_USN=1DS24CS421
-          GEMINI_ENABLED=false   (system works fully offline)
+          GEMINI_API_KEY=   (OPTIONAL - system runs fully offline
+              without it; with a key, extraction gets smarter and the
+              Gemini chat page unlocks after its own Enable press)
 
 STEP 4 — One-time Telegram session
   [PC]  python setup_session.py
@@ -73,11 +75,23 @@ STEP 4 — One-time Telegram session
         -> it prints/stores TELEGRAM_SESSION_STRING
         -> paste that string into .env
 
+STEP 4b — ACTIVATE THE BOT (do not skip!)
+  [PH]  Open Telegram -> search your bot's username -> press START
+        -> send any message once.
+        Telegram FORBIDS bots from messaging users who never started
+        them. Skipping this = every alert fails with "chat not found".
+        The backend now self-tests this on every boot: if you see
+        "STARTUP PING FAILED" in the console, this step was missed.
+
 STEP 5 — Run everything
   Terminal A:                          Terminal B:
     cd backend                          cd frontend
     venv activated                      npm install
     uvicorn main:app --reload           npm run dev
+    (use --reload ONLY for development. If you ever see
+     "Conflict: terminated by other getUpdates request",
+     an old worker survived Ctrl+C — kill stray python
+     processes and start clean.)
   Backend API docs: http://localhost:8000/docs
   Dashboard:        http://localhost:5173
 
@@ -238,8 +252,13 @@ Recommended free stack (total cost: ₹0):
 PART 5 — AFTER DEPLOYMENT VERIFICATION
 ================================================================
 
- 1. Health:      https://...onrender.com/api/health → ok
- 2. Docs:        https://...onrender.com/docs loads
+  1. Health:      https://...onrender.com/api/health → ok
+  2. Docs:        /docs returns 404 BY DEFAULT (security). To view
+                  Swagger on the cloud, set DOCS_ENABLED=true in
+                  Render env vars (turn it back off afterwards).
+  3. Startup ping: backend log shows "Startup ping delivered" AND
+                  your Telegram gets "PlacementOS is online".
+                  If not → press START on the bot, check chat id.
  3. Login:       Vercel app → wrong password REJECTED, right one logs in
  4. Bot:         Telegram → /start on your bot → replies
  5. Live loop:   post a test message in the placement group
