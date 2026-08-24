@@ -4,12 +4,14 @@ Supports JSON, TXT, HTML. Streams progress via SSE.
 """
 import asyncio
 import json
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
 from services.telegram_importer import import_telegram_export
+from api.routes.auth import require_auth
 
-router = APIRouter(prefix="/api/import", tags=["import"])
+router = APIRouter(prefix="/api/import", tags=["import"],
+                   dependencies=[Depends(require_auth)])
 
 
 @router.post("/upload")

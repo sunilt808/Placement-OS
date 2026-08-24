@@ -21,10 +21,75 @@ from services.watchdog import (
     set_userbot_running,
 )
 from services.pdf_service import download_and_extract_pdf
+from services.excel_service import (
+    is_spreadsheet,
+    process_spreadsheet,
+    handle_shortlist_report,
+)
+from services.image_ocr import ocr_image_bytes
 
 IST = pytz.timezone("Asia/Kolkata")
 
 _client: TelegramClient | None = None
+
+
+def _doc_filename(message) -> str:
+    try:
+        for attr in message.media.document.attributes:
+            fn = getattr(attr, "file_name", None)
+            if fn:
+                return fn
+    except Exception:
+        pass
+    return ""
+
+
+async def _route_media(client, message, caption: str = ""):
+    """
+    Single media router for every attachment type the college sends.
+    Returns (pdf_info, excel_report) — at most one is non-None.
+      .xlsx/.xls/.csv  -> shortlist scanner (bypasses AI pipeline)
+      .pdf/.docx/html  -> text extraction into pipeline
+      photo/JPG        -> offline OCR into pipeline
+    """
+    if not message.media:
+        return None, None
+
+    doc = getattr(message.media, "document", None)
+    if doc:
+        filename = _doc_filename(message)
+        mime = getattr(doc, "mime_type", "") or ""
+        if is_spreadsheet(filename, mime):
+            try:
+                data = await client.download_media(message, file=bytes)
+                if data:
+                    report = await process_spreadsheet(
+                        data, filename or "result_sheet.csv", mime, caption
+                    )
+                    return None, report
+            except Exception as e:
+                print(f"[Userbot] Spreadsheet handling failed: {e}")
+            return None, None
+        return await download_and_extract_pdf(client, message), None
+
+    if getattr(message.media, "photo", None):
+        try:
+            data = await client.download_media(message, file=bytes)
+            if data:
+                ocr_text = await ocr_image_bytes(data)
+                if ocr_text:
+                    return ({
+                        "text": ocr_text,
+                        "filename": "photo_announcement.jpg",
+                        "mime_type": "image/jpeg",
+                        "size_bytes": len(data),
+                        "storage_key": None,
+                        "text_extracted": True,
+                    }), None
+        except Exception as e:
+            print(f"[Userbot] Photo OCR failed: {e}")
+
+    return None, None
 
 
 async def _scan_recent_history(days: Optional[int] = None):
@@ -59,10 +124,14 @@ async def _scan_recent_history(days: Optional[int] = None):
             # Only process if it has text or document
             text = message.message or ""
             
-            # Check for PDF
+            # Route media: spreadsheet -> shortlist scan, doc -> PDF, photo -> OCR
             pdf_info = None
-            if message.media and getattr(message.media, "document", None):
-                pdf_info = await download_and_extract_pdf(_client, message)
+            excel_report = None
+            if message.media:
+                pdf_info, excel_report = await _route_media(_client, message)
+                
+            if excel_report:
+                await handle_shortlist_report(excel_report)
                 
             if pdf_info:
                 text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_info['text']}".strip()
@@ -233,21 +302,27 @@ async def start_userbot():
                 print("=" * 60)
 
                 # ---------------------------------------------
-                # Ignore media-only messages without extractable text
+                # Route media: spreadsheet -> shortlist scan,
+                # document -> PDF text, photo -> offline OCR
                 # ---------------------------------------------
 
                 pdf_info = None
-                if event.message.media and getattr(event.message.media, "document", None):
-                    print("[Userbot] Document detected, attempting PDF extraction...")
-                    pdf_info = await download_and_extract_pdf(_client, event.message)
-                    
+                excel_report = None
+                if event.message.media:
+                    pdf_info, excel_report = await _route_media(
+                        _client, event.message, caption=text
+                    )
+
+                if excel_report:
+                    await handle_shortlist_report(excel_report)
+
                 if pdf_info:
                     text = f"{text}\n\n--- PDF CONTENT ---\n{pdf_info['text']}".strip()
-                    print(f"[Userbot] Successfully extracted {len(pdf_info['text'])} characters from PDF.")
+                    print(f"[Userbot] Successfully extracted {len(pdf_info['text'])} characters from attachment.")
 
                 if not text.strip():
                     print(
-                        "[Userbot] Message has no text and no extractable PDF. Skipping."
+                        "[Userbot] Message has no text and no extractable media. Skipping."
                     )
                     return
 

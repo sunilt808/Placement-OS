@@ -20,11 +20,23 @@ TELEGRAM_API = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
 
 
 async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mode: str = "HTML"):
-    """Send a message to the student's personal chat."""
+    """Send a message to the student's personal chat.
+
+    Extracted placement text can contain raw <, >, & or unbalanced tags that
+    Telegram's HTML parser rejects with HTTP 400. On such a failure the same
+    message is retried once WITHOUT parse_mode so delivery never breaks.
+    """
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         # Notifications are an optional delivery channel; extraction and storage
         # must never fail merely because Telegram has not been configured.
         return None
+
+    async def _post(payload: dict):
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+
     payload = {
         "chat_id": settings.telegram_chat_id,
         "text": text,
@@ -34,10 +46,17 @@ async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mo
     if reply_markup:
         payload["reply_markup"] = reply_markup
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
-        resp.raise_for_status()
-    return resp.json()
+    try:
+        return await _post(payload)
+    except httpx.HTTPStatusError as e:
+        if e.response is not None and e.response.status_code == 400 and parse_mode:
+            print(f"[Notify] HTML parse rejected (400) — retrying as plain text")
+            fallback = dict(payload)
+            fallback["parse_mode"] = None
+            import re as _re
+            fallback["text"] = _re.sub(r"</?(?:b|i|u|s|code|pre|a)[^>]*>", "", text)
+            return await _post(fallback)
+        raise
 
 
 def _inline_keyboard(opportunity_id: str) -> dict:
@@ -72,8 +91,20 @@ async def send_new_opportunity_alert(opp: dict, opportunity_id: str):
     dl_str = format_deadline_ist(deadline) or "Not specified"
     remaining = time_remaining_str(deadline) if deadline else ""
 
-    text = f"""🚨 <b>NEW PLACEMENT OPPORTUNITY</b>
+    # Role-first match badge (never branch-gated)
+    role_class_labels = {
+        "CSE_BOTH": "🎯 PERFECT MATCH — CSE role + CSE/ISE branch",
+        "CSE_ROLE": "✅ CSE ROLE MATCH",
+        "CSE_BRANCH": "🟡 BRANCH MATCH (role not specified)",
+        "NOT_CSE": "⚪ Non-CSE role",
+        "UNKNOWN": "❓ Role unknown — verify manually",
+    }
+    rc = opp.get("role_class")
+    badge = f"\n{role_class_labels[rc]}\n" if rc else ""
+    form_badge = "📝 <b>GOOGLE FORM REGISTRATION</b>\n" if opp.get("has_registration_form") else ""
 
+    text = f"""🚨 <b>NEW PLACEMENT OPPORTUNITY</b>
+{badge}{form_badge}
 🏢 <b>Company:</b> {company}
 💼 <b>Role:</b> {role}
 💰 <b>CTC:</b> {ctc}
@@ -175,6 +206,31 @@ async def send_watchdog_alert(message: str):
     """🚨 Watchdog/system alert."""
     text = f"🚨 <b>SYSTEM ALERT</b>\n\n{message}"
     await _send_message(text)
+
+
+async def send_shortlist_hit_alert(company, filename: str, hit: dict, opportunity_id: str):
+    """🎉 YOU ARE SHORTLISTED — fired when the student's identity is found in a result sheet."""
+    row_preview = " | ".join(v for v in hit.get("row", [])[:8] if v)
+    text = f"""🎉🎉 <b>SHORTLIST ALERT — CHECK NOW</b> 🎉🎉
+
+✅ <b>YOUR {hit['matched_field']} WAS FOUND IN A RESULT SHEET!</b>
+
+🏢 <b>Drive:</b> {company or 'Unknown (check dashboard)'}
+📎 <b>Sheet:</b> {filename}
+🔎 <b>Matched:</b> {hit['matched_field']} → "{hit['cell_text']}" (row {hit['row_number']})
+{f'<code>{row_preview[:300]}</code>' if row_preview else ''}
+
+⚠️ Follow next steps in the placement group IMMEDIATELY."""
+
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Mark Applied", "callback_data": f"applied:{opportunity_id}"},
+                {"text": "📋 View Details", "callback_data": f"view:{opportunity_id}"},
+            ],
+        ]
+    }
+    await _send_message(text, reply_markup=keyboard)
 
 
 async def send_import_complete(stats: dict):

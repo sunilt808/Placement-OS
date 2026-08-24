@@ -1,12 +1,14 @@
 """
 api/routes/settings.py — Eligibility profile and app configuration.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from database import app_settings_col
+from api.routes.auth import require_auth
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["settings"],
+                   dependencies=[Depends(require_auth)])
 
 
 class EligibilityProfile(BaseModel):

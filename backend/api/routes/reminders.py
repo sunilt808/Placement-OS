@@ -1,10 +1,12 @@
 """
 api/routes/reminders.py — Reminder management routes.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from services.reminder_service import get_upcoming_reminders
+from api.routes.auth import require_auth
 
-router = APIRouter(prefix="/api/reminders", tags=["reminders"])
+router = APIRouter(prefix="/api/reminders", tags=["reminders"],
+                   dependencies=[Depends(require_auth)])
 
 
 @router.get("")

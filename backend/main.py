@@ -60,6 +60,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── API surface hardening ─────────────────────────────────────────────────
+# Swagger/ReDoc/openapi.json are stripped unless settings.docs_enabled=True.
+DOCS_ROUTES = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
+
+def apply_docs_policy(application: FastAPI) -> int:
+    """Remove interactive-docs routes. Returns how many were removed."""
+    if settings.docs_enabled:
+        return 0
+    kept = [r for r in application.router.routes if getattr(r, "path", None) not in DOCS_ROUTES]
+    removed = len(application.router.routes) - len(kept)
+    application.router.routes[:] = kept
+    return removed
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -68,11 +81,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
+
 app.include_router(auth_router)
 app.include_router(opportunities.router)
 app.include_router(import_.router)
 app.include_router(reminders.router)
 app.include_router(settings_router.router)
+
+apply_docs_policy(app)
 
 @app.get("/api/health")
 async def health():

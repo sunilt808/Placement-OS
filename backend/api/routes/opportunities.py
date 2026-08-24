@@ -1,12 +1,12 @@
 """
 api/routes/opportunities.py — CRUD routes for opportunities.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import FileResponse
 from pathlib import Path
 from typing import Optional, List
 from bson import ObjectId
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from database import opportunities_col, events_col, messages_col
 from models.opportunity import ApplicationStatus, OpportunityUpdate
@@ -14,8 +14,10 @@ from services.deadline_engine import get_urgency
 from services.reminder_service import cancel_all_reminders, schedule_reminders
 from services.opportunity_engine import get_timeline
 from config import settings
+from api.routes.auth import require_auth
 
-router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
+router = APIRouter(prefix="/api/opportunities", tags=["opportunities"],
+                   dependencies=[Depends(require_auth)])
 
 
 def _serialize(doc: dict) -> dict:
@@ -46,6 +48,8 @@ async def list_opportunities(
     search: Optional[str] = None,
     category: Optional[str] = None,
     eligibility: Optional[str] = None,
+    role_class: Optional[str] = None,      # CSE_BOTH|CSE_ROLE|CSE_BRANCH|NOT_CSE|UNKNOWN
+    forms_only: bool = False,              # only drives with Google Form registration
     days: Optional[int] = None,
     cse_only: bool = False,
     limit: int = Query(50, le=200),
@@ -61,6 +65,10 @@ async def list_opportunities(
         query["category"] = category
     if eligibility:
         query["eligibility_status"] = eligibility
+    if role_class:
+        query["role_class"] = role_class
+    if forms_only:
+        query["has_registration_form"] = True
     if search:
         query["$or"] = [
             {"company": {"$regex": search, "$options": "i"}},
@@ -86,7 +94,9 @@ async def list_opportunities(
     if cse_only:
         query["is_cse_relevant"] = True
 
-    cursor = col.find(query, sort=[("created_at", -1)], skip=skip, limit=limit)
+    # Urgency is a computed field (not stored), so we must evaluate it over the
+    # full matched set BEFORE paginating to keep pages and totals consistent.
+    cursor = col.find(query, sort=[("created_at", -1)])
     results = []
     async for opp in cursor:
         opp["_id"] = str(opp["_id"])
@@ -96,11 +106,11 @@ async def list_opportunities(
         opp["deadline_urgency"] = _opp_urgency(opp)
         results.append(opp)
 
-    # Filter by urgency after computing it
     if urgency:
         results = [o for o in results if o.get("deadline_urgency") == urgency]
 
-    total = await col.count_documents(query)
+    total = len(results)
+    results = results[skip:skip + limit]
     return {"opportunities": results, "total": total, "skip": skip, "limit": limit}
 
 
@@ -176,7 +186,10 @@ async def list_ingested_messages(
         message["_id"] = str(message["_id"])
         for field in ("message_date", "processed_at"):
             if isinstance(message.get(field), datetime):
-                message[field] = message[field].isoformat()
+                value = message[field]
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=timezone.utc)
+                message[field] = value.isoformat()
         source = message.get("source")
         message["source"] = source.value if hasattr(source, "value") else source
         message["attachment_available"] = bool(message.get("attachment_storage_key"))

@@ -15,6 +15,8 @@ export default function Opportunities() {
     urgency: searchParams.get('urgency') || '',
     category: searchParams.get('category') || '',
     eligibility: searchParams.get('eligibility') || '',
+    role_class: searchParams.get('role_class') || '',
+    forms_only: searchParams.get('forms_only') === 'true',
     days: searchParams.get('days') || '',
     cse_only: searchParams.get('cse_only') === 'true',
   });
@@ -28,6 +30,8 @@ export default function Opportunities() {
         urgency: filters.urgency || undefined,
         category: filters.category || undefined,
         eligibility: filters.eligibility || undefined,
+        role_class: filters.role_class || undefined,
+        forms_only: filters.forms_only || undefined,
         days: filters.days || undefined,
         cse_only: filters.cse_only || undefined,
         limit: 100
@@ -48,6 +52,8 @@ export default function Opportunities() {
     if (filters.urgency) params.set('urgency', filters.urgency);
     if (filters.category) params.set('category', filters.category);
     if (filters.eligibility) params.set('eligibility', filters.eligibility);
+    if (filters.role_class) params.set('role_class', filters.role_class);
+    if (filters.forms_only) params.set('forms_only', 'true');
     if (filters.days) params.set('days', filters.days);
     if (filters.cse_only) params.set('cse_only', 'true');
     setSearchParams(params, { replace: true });
@@ -147,6 +153,29 @@ export default function Opportunities() {
           <option value="UNCLEAR">⚠️ Unclear</option>
           <option value="NOT_ELIGIBLE">❌ Not Eligible</option>
         </select>
+
+        <select
+          className="filter-select"
+          value={filters.role_class}
+          onChange={e => setFilters(f => ({ ...f, role_class: e.target.value }))}
+        >
+          <option value="">Any Role Match</option>
+          <option value="CSE_BOTH">🎯 CSE Role + Branch</option>
+          <option value="CSE_ROLE">✅ CSE Role (SDE/FSD/QA/Data…)</option>
+          <option value="CSE_BRANCH">🟡 CSE/ISE Branch Only</option>
+          <option value="UNKNOWN">❓ Unknown Role</option>
+          <option value="NOT_CSE">⚪ Non-CSE Roles</option>
+        </select>
+
+        <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={filters.forms_only}
+            onChange={e => setFilters(f => ({ ...f, forms_only: e.target.checked }))}
+            style={{ accentColor: 'var(--blue)' }}
+          />
+          📝 Form Drives
+        </label>
 
         <label className="toggle-switch" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', cursor: 'pointer' }}>
           <input 

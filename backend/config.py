@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     daily_summary_hour: int = 8
     catchup_days: int = 10
     message_retention_days: int = 3
+    expiry_grace_hours: int = 12      # Janitor: deadline passed this long -> EXPIRED
+
+    # ── Student identity (hardcoded shortlist matching) ───────────────────────
+    student_name: str = "Sunil T"
+    student_usn: str = "1DS24CS421"
 
     # ── Gemini model names ────────────────────────────────────────────────────
     gemini_flash_model: str = "gemini-3.6-flash"
@@ -49,6 +54,17 @@ class Settings(BaseSettings):
 
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    # ── Admin auth (dashboard login) ──────────────────────────────────────────
+    # MUST come from .env / environment. Empty values disable login (fail-closed).
+    admin_username: str = ""
+    admin_password: str = ""
+    admin_security_code: str = ""
+    jwt_secret: str = ""
+
+    # ── API surface ───────────────────────────────────────────────────────────
+    # Swagger UI / ReDoc / openapi.json are hidden unless explicitly enabled.
+    docs_enabled: bool = False
 
 
 settings = Settings()

@@ -90,6 +90,22 @@ export default function OpportunityCard({ opp, onStatusChange }) {
           </div>
           <div className="opp-role">
             {opp.role || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Role not specified</span>}
+            {opp.role_class && ['CSE_BOTH', 'CSE_ROLE'].includes(opp.role_class) && (
+              <span title={opp.role_class_reason || 'CSE role match'} style={{
+                marginLeft: 8, fontSize: '0.65rem', padding: '2px 6px', borderRadius: 6,
+                background: 'rgba(34,197,94,0.15)', color: '#4ade80', fontWeight: 700,
+              }}>
+                CSE ROLE ✓
+              </span>
+            )}
+            {opp.has_registration_form && (
+              <span title="Google Form registration link found" style={{
+                marginLeft: 6, fontSize: '0.65rem', padding: '2px 6px', borderRadius: 6,
+                background: 'rgba(59,130,246,0.15)', color: '#60a5fa', fontWeight: 700,
+              }}>
+                📝 FORM
+              </span>
+            )}
           </div>
         </div>
         <StatusBadge status={opp.status} />

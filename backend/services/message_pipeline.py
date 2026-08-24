@@ -13,7 +13,8 @@ Pipeline:
     → Telegram alert
 """
 import hashlib
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 from database import messages_col, opportunities_col
@@ -25,6 +26,30 @@ from services.notification_service import (
     send_new_opportunity_alert,
     send_needs_review_alert,
 )
+
+# Google Forms / registration-form URL detection — pure regex, no network call
+GOOGLE_FORM_RE = re.compile(
+    r"(https?://(?:forms\.gle|docs\.google\.com/forms)[^\s)\]>\"']+)", re.IGNORECASE
+)
+
+
+def _enrich_registration_form(extraction, text: str) -> None:
+    """
+    Deterministic post-extraction pass:
+    - If a Google Forms link exists in the message/link -> flag the drive as
+      REGISTRATION REQUIRED and force action_required=True.
+    - Captures the form link even when the extractor missed it.
+    """
+    match = GOOGLE_FORM_RE.search(text or "")
+    if match and not extraction.registration_link:
+        extraction.registration_link = match.group(1)
+
+    link_is_form = bool(
+        extraction.registration_link and GOOGLE_FORM_RE.search(extraction.registration_link)
+    )
+    if link_is_form or match:
+        extraction.has_registration_form = True
+        extraction.action_required = True
 
 
 def _content_hash(text: str) -> str:
@@ -65,13 +90,39 @@ async def ingest_message(
     existing_msg = await col.find_one({"content_hash": content_hash})
     if existing_msg:
         print(f"[Pipeline] Duplicate message detected (hash={content_hash[:8]}...), skipping")
+        # A rule upgrade can make an earlier placement message actionable.
+        # Retry only records that were already classified as placement-related
+        # but never produced an opportunity; ordinary duplicates stay cheap.
+        if existing_msg.get("is_placement_related") and not existing_msg.get("opportunity_id"):
+            try:
+                retry_date = existing_msg.get("message_date") or message_date
+                if retry_date.tzinfo is None:
+                    retry_date = retry_date.replace(tzinfo=timezone.utc)
+                extraction, _ = await classify_and_extract(
+                    text=existing_msg.get("message_text", text),
+                    message_date=retry_date,
+                    cached_hash=content_hash,
+                )
+                opportunity_id = await process_extraction(
+                    extraction=extraction,
+                    message_text=existing_msg.get("message_text", text),
+                    message_id=str(existing_msg["_id"]),
+                )
+                if opportunity_id:
+                    await col.update_one({"_id": existing_msg["_id"]}, {"$set": {"opportunity_id": opportunity_id}})
+                return opportunity_id
+            except Exception as retry_error:
+                print(f"[Pipeline] Retry failed: {retry_error}")
         return existing_msg.get("opportunity_id")
 
     # ── 2. Save raw message ────────────────────────────────────────────────────
     msg_doc = {
         "telegram_message_id": telegram_message_id,
         "message_text": text,
-        "message_date": message_date.replace(tzinfo=None) if message_date.tzinfo else message_date,
+        "message_date": (
+            message_date.astimezone(timezone.utc).replace(tzinfo=None)
+            if message_date.tzinfo else message_date
+        ),
         "source": source,
         "sender_name": sender_name,
         "content_hash": content_hash,
@@ -94,6 +145,9 @@ async def ingest_message(
             message_date=message_date,
             cached_hash=content_hash,
         )
+
+        # Deterministic enrichment — Google Forms registration detection
+        _enrich_registration_form(extraction, text)
 
         if pdf_info and pdf_info.get("filename"):
             extraction.source_document = pdf_info["filename"]
@@ -131,7 +185,12 @@ async def ingest_message(
 
             if opp:
                 try:
-                    if extraction.category == OpportunityCategory.NEEDS_REVIEW:
+                    # Follow-up messages (JD PDF, form link, deadline change)
+                    # merge into an existing drive — never re-alert as NEW.
+                    merged = len(opp.get("source_message_ids") or []) > 1
+                    if merged:
+                        print(f"[Pipeline] Merged follow-up into {opp.get('company')} — no new-opportunity alert")
+                    elif extraction.category == OpportunityCategory.NEEDS_REVIEW:
                         await send_needs_review_alert(opp, opportunity_id, text)
                     else:
                         await send_new_opportunity_alert(opp, opportunity_id)

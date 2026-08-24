@@ -58,6 +58,7 @@ class AIExtraction(BaseModel):
     registration_link: Optional[str] = None
     required_skills: Optional[List[str]] = None
     action_required: bool = False
+    has_registration_form: bool = False   # Google Forms / registration link detected
     summary: Optional[str] = None
     confidence: float = 0.0
 

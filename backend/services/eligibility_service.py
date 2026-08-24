@@ -5,6 +5,7 @@ Evaluates student eligibility for an opportunity.
 """
 
 import re
+from typing import Optional
 
 from database import app_settings_col
 
@@ -238,6 +239,152 @@ def parse_cgpa_requirement(requirement) -> float | None:
         return float(match.group(1))
     except ValueError:
         return None
+
+
+# =============================================================================
+# ROLE-FIRST CSE SIGNAL CLASSIFICATION
+# -----------------------------------------------------------------------------
+# Design rule (user requirement): do NOT gate on "CSE branch" mentions.
+# Colleges often omit branches entirely. Priority:
+#   1. CSE-family ROLE match (sde/fsd/qa/data analyst/...)  -> relevant
+#   2. CSE-family BRANCH match (cse/ise/it/aiml)            -> relevant
+#   3. Explicit non-CSE role blacklist                      -> quiet-log only
+#   4. Anything else                                        -> UNKNOWN (still shown;
+#      recall > precision — never silently hide)
+# =============================================================================
+
+CSE_FAMILY_BRANCHES = {
+    "cse", "cs", "computer science",
+    "ise", "is", "information science",
+    "it", "information technology",
+    "aiml", "ai ml", "artificial intelligence and machine learning",
+    "ai and data science", "cse ai ml", "data science",
+    "bca", "mca",
+}
+
+CSE_ROLE_DB = {
+    # Software engineering core
+    "software", "software engineer", "software developer",
+    "software development engineer", "sde", "sde 1", "sde 2", "sdet",
+    "developer", "programmer", "coder", "member of technical staff",
+    "technical staff", "product engineer", "systems engineer",
+    "system engineer", "platform engineer", "application developer",
+    "application engineer",
+
+    # Full stack / web
+    "full stack", "fullstack", "fsd", "mern", "mean stack",
+    "web developer", "web development", "web engineer",
+    "frontend", "front end", "backend", "back end",
+    "api developer", "rest api",
+
+    # Language-specific dev
+    "java developer", "python developer", "php developer",
+    "node js developer", "react developer", "angular developer",
+    "dotnet developer", "net developer", "sql developer", "pl sql",
+
+    # Mobile
+    "mobile developer", "android developer", "ios developer",
+    "flutter developer", "react native developer", "app developer",
+
+    # QA / Testing
+    "qa", "qa engineer", "quality assurance", "quality analyst",
+    "quality engineer", "test engineer", "testing engineer",
+    "automation tester", "automation test engineer", "test analyst",
+    "manual tester", "selenium", "performance engineer",
+    "release engineer", "build engineer",
+
+    # Data roles
+    "data analyst", "data scientist", "data science", "data engineer",
+    "analytics", "analytics consultant", "business intelligence",
+    "bi analyst", "bi developer", "big data", "hadoop developer",
+    "etl developer", "database administrator", "dba",
+
+    # AI / ML
+    "ai engineer", "artificial intelligence", "machine learning",
+    "ml engineer", "deep learning", "nlp engineer", "computer vision",
+    "generative ai", "genai", "prompt engineer", "ai ml engineer",
+
+    # Cloud / DevOps / Infra
+    "cloud engineer", "devops", "devops engineer", "site reliability",
+    "sre", "aws engineer", "azure engineer", "cloud architect",
+    "infrastructure engineer", "system administrator", "sysadmin",
+    "network engineer",
+
+    # Security
+    "cybersecurity", "cyber security", "security analyst",
+    "security engineer", "penetration tester", "soc analyst",
+
+    # Enterprise / niche tech
+    "salesforce developer", "sap abap", "mainframe developer",
+    "embedded software", "game developer", "unity developer",
+    "unreal developer", "blockchain developer",
+
+    # Trainee / intern variants that imply coding
+    "software trainee", "trainee software engineer",
+    "it trainee", "graduate engineer trainee it",
+    "software intern", "intern software", "digital technology trainee",
+}
+
+NON_CSE_ROLE_TERMS = {
+    "mechanical", "mech design", "mechanical design", "civil",
+    "civil site", "structural", "site engineer", "electrical",
+    "electrician", "autocad", "catia", "solidworks", "hvac",
+    "production supervisor", "quality control", "welder", "surveyor",
+    "safety officer", "technician", "diploma trainee",
+    "sales", "marketing", "business development", "telecalling",
+    "hr executive", "human resources", "finance", "accounts",
+    "accountant", "operations executive", "receptionist",
+}
+
+
+def _word_contains(text: str, term: str) -> bool:
+    """Word-boundary substring match so 'cs' doesn't hit 'enterprise'."""
+    if not text or not term:
+        return False
+    return re.search(rf"\b{re.escape(term)}\b", text) is not None
+
+
+def classify_cse_signal(role: Optional[str], eligible_branches) -> dict:
+    """
+    Role-first relevance verdict for an opportunity.
+
+    Returns:
+        {
+          "role_class": "CSE_BOTH" | "CSE_ROLE" | "CSE_BRANCH" | "NOT_CSE" | "UNKNOWN",
+          "role_class_reason": human-readable explanation,
+        }
+    """
+    role_norm = normalize_text(role or "")
+    branches_norm = [normalize_text(b) for b in (eligible_branches or []) if b]
+
+    role_hit = bool(role_norm) and any(
+        _word_contains(role_norm, alias) for alias in CSE_ROLE_DB
+    )
+    role_blacklisted = bool(role_norm) and any(
+        _word_contains(role_norm, term) for term in NON_CSE_ROLE_TERMS
+    )
+    branch_hit = any(
+        any(_word_contains(branch, fam) for fam in CSE_FAMILY_BRANCHES)
+        for branch in branches_norm
+    )
+
+    if role_hit and branch_hit:
+        return {"role_class": "CSE_BOTH",
+                "role_class_reason": f"Role '{role}' is a CSE role AND CSE-family branch mentioned"}
+    if role_hit:
+        return {"role_class": "CSE_ROLE",
+                "role_class_reason": f"CSE-family role: '{role}'"}
+    if branch_hit:
+        return {"role_class": "CSE_BRANCH",
+                "role_class_reason": f"No specific role, but CSE-family branches listed: {', '.join(str(b) for b in (eligible_branches or []))}"}
+    if role_blacklisted:
+        return {"role_class": "NOT_CSE",
+                "role_class_reason": f"Non-CSE role: '{role}'"}
+    if not role_norm and not branches_norm:
+        return {"role_class": "UNKNOWN",
+                "role_class_reason": "No role or branch information in message"}
+    return {"role_class": "UNKNOWN",
+            "role_class_reason": f"Could not classify role '{role}' / branches {eligible_branches}"}
 
 
 # =============================================================================

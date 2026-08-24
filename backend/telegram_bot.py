@@ -257,6 +257,133 @@ async def handle_forwarded(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ Message processed — not classified as placement-related.")
 
 
+# ── Media forward handlers — spreadsheets, PDFs and photos ───────────────────
+
+async def handle_forwarded_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Forwarded documents: result sheets -> shortlist scan; JDs -> pipeline."""
+    if not _auth_check(update):
+        return
+    from services.excel_service import is_spreadsheet, process_spreadsheet, handle_shortlist_report
+    from services.pdf_service import download_and_extract_pdf  # reuse text path via bytes wrapper
+
+    doc = update.message.document
+    filename = doc.file_name or "attachment"
+    caption = update.message.caption or ""
+
+    if is_spreadsheet(filename, doc.mime_type or ""):
+        await update.message.reply_text("📊 Result sheet detected — scanning for YOU...")
+        tg_file = await ctx.bot.get_file(doc.file_id)
+        data = await tg_file.download_as_bytearray()
+        report = await process_spreadsheet(bytes(data), filename, doc.mime_type or "", caption)
+        opp_id = await handle_shortlist_report(report)
+        hit = report.get("hit")
+        if hit:
+            await update.message.reply_text(
+                f"🎉 FOUND YOU ({hit['matched_field']}: {hit['cell_text']}) in '{filename}'!"
+            )
+        elif opp_id:
+            await update.message.reply_text(
+                f"📄 Sheet stored. Your {settings.student_usn} was NOT found in "
+                f"{report.get('rows_scanned', 0)} rows."
+            )
+        else:
+            await update.message.reply_text("📄 Sheet scanned — no matching drive found.")
+        return
+
+    # Non-spreadsheet document: extract text locally and run the pipeline
+    tg_file = await ctx.bot.get_file(doc.file_id)
+    data = bytes(await tg_file.download_as_bytearray())
+    from services.pdf_service import (
+        _extract_pdf, _extract_docx, _extract_html, _store_document, MAX_TEXT_LENGTH,
+    )
+    lower = filename.lower()
+    def _extract_sync():
+        if lower.endswith(".pdf") or (doc.mime_type == "application/pdf"):
+            return _extract_pdf(data)
+        if lower.endswith((".docx", ".doc")):
+            return _extract_docx(data)
+        if lower.endswith((".html", ".htm")):
+            return _extract_html(data)
+        if lower.endswith(".txt"):
+            return data.decode("utf-8", errors="ignore").strip()
+        return ""
+    import asyncio as _asyncio
+    extracted = ""
+    try:
+        extracted = await _asyncio.to_thread(_extract_sync)
+    except Exception:
+        pass
+    storage_key = await _asyncio.to_thread(_store_document, data, filename)
+
+    full_text = f"{caption}\n\n--- DOCUMENT CONTENT ---\n{extracted}".strip()
+    if not full_text.strip():
+        await update.message.reply_text("⚠️ Could not extract text from this document.")
+        return
+    if len(extracted) > MAX_TEXT_LENGTH:
+        extracted = extracted[:MAX_TEXT_LENGTH]
+        full_text = f"{caption}\n\n--- DOCUMENT CONTENT ---\n{extracted}".strip()
+
+    fwd_date = update.message.forward_date
+    msg_date = fwd_date if fwd_date else update.message.date
+    if msg_date.tzinfo is None:
+        msg_date = IST.localize(msg_date)
+
+    await update.message.reply_text("🔄 Processing document...")
+    pdf_info = {
+        "text": extracted, "filename": filename,
+        "mime_type": doc.mime_type or "application/octet-stream",
+        "size_bytes": len(data), "storage_key": storage_key,
+        "text_extracted": bool(extracted),
+    }
+    opp_id = await ingest_message(
+        text=full_text, message_date=msg_date, source=MessageSource.BOT_FORWARD,
+        telegram_message_id=update.message.message_id, pdf_info=pdf_info,
+    )
+    if opp_id:
+        await update.message.reply_text(f"✅ Document processed! http://localhost:5173/opportunities/{opp_id}")
+    else:
+        await update.message.reply_text("ℹ️ Processed — not classified as placement-related.")
+
+
+async def handle_forwarded_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Forwarded photos (posters/screenshots) -> offline OCR -> pipeline."""
+    if not _auth_check(update):
+        return
+    from services.image_ocr import ocr_image_bytes
+
+    caption = update.message.caption or ""
+    photo = update.message.photo[-1]  # highest resolution
+    tg_file = await ctx.bot.get_file(photo.file_id)
+    data = bytes(await tg_file.download_as_bytearray())
+
+    await update.message.reply_text("🖼️ Reading image text locally (OCR)...")
+    ocr_text = await ocr_image_bytes(data) or ""
+
+    full_text = f"{caption}\n\n--- IMAGE TEXT ---\n{ocr_text}".strip()
+    if not full_text.strip():
+        await update.message.reply_text("⚠️ No readable text found in the image.")
+        return
+
+    fwd_date = update.message.forward_date
+    msg_date = fwd_date if fwd_date else update.message.date
+    if msg_date.tzinfo is None:
+        msg_date = IST.localize(msg_date)
+
+    pdf_info = {
+        "text": ocr_text, "filename": "photo_announcement.jpg",
+        "mime_type": "image/jpeg", "size_bytes": len(data),
+        "storage_key": None, "text_extracted": bool(ocr_text),
+    }
+    opp_id = await ingest_message(
+        text=full_text, message_date=msg_date, source=MessageSource.BOT_FORWARD,
+        telegram_message_id=update.message.message_id, pdf_info=pdf_info,
+    )
+    if opp_id:
+        await update.message.reply_text(f"✅ Image processed! http://localhost:5173/opportunities/{opp_id}")
+    else:
+        await update.message.reply_text("ℹ️ Processed — not classified as placement-related.")
+
+
 # ── Callback Query Handler — inline button actions ────────────────────────────
 
 async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -335,5 +462,7 @@ def build_bot_app() -> Application:
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_forwarded))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_forwarded_document))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_forwarded_photo))
     app.add_handler(CallbackQueryHandler(handle_callback))
     return app

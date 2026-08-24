@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import api from '../api/client';
 import { Lock, User, Key, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,20 +17,17 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, security_code: securityCode })
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Login failed');
-      
+      const data = await api.post('/api/auth/login', {
+        username,
+        password,
+        security_code: securityCode,
+      }).then(r => r.data);
+
       login(data.access_token, data.user);
-      toast.success('Welcome back, Sunil!');
-      navigate('/');
+      toast.success(`Welcome back, ${data.user?.username || 'Sunil'}!`);
+      navigate('/dashboard');
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e.response?.data?.detail || e.message || 'Login failed');
     } finally {
       setLoading(false);
     }

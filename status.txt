@@ -1,0 +1,269 @@
+========================================================================
+PLACEMENTOS — FULL PROJECT STATUS REPORT
+Generated: 2026-08-24 | Verified by direct code inspection (not docs)
+========================================================================
+
+1. PROJECT PURPOSE
+------------------------------------------------------------------------
+Problem: The college placement cell floods a Telegram group with 100+
+messages/day. Company drives, deadlines, eligibility rules and
+registration links get buried -> students miss real opportunities.
+
+Solution: A self-hosted AI pipeline that ingests placement messages from
+Telegram (live userbot + manual forward-bot + historical export import),
+extracts structured opportunities locally (NLP first, Gemini optional),
+deduplicates them into a single evolving record per drive, tracks
+deadlines deterministically in Python, sends Telegram reminders before
+deadlines, and shows everything in a React "Placement Control Center".
+
+Core design principle (docs/plan1.txt): recall > precision. A false
+alert is acceptable; a missed genuine opportunity is not. AI understands
+messages; Python owns state/deadlines/reminders.
+
+Stack: FastAPI + Motor/MongoDB + Telethon + python-telegram-bot +
+APScheduler + spaCy/dateparser + RapidFuzz + optional Google Gemini |
+React 19 + Vite + Axios + react-hot-toast.
+
+2. ARCHITECTURE (AS ACTUALLY BUILT — VERIFIED)
+------------------------------------------------------------------------
+INGESTION (3 paths, one shared pipeline):
+  A. userbot.py        Telethon personal-account listener on the
+                       placement group; PDF download+extraction;
+                       startup catch-up scan (dynamic catchup_days read
+                       from DB app_settings); manual scan trigger.
+  B. telegram_bot.py   Bot API: manual forwards + full command set
+                       (/start /help /jobs /today /urgent /deadlines
+                       /applied /pending /expired /stats /search)
+                       + inline callback buttons.
+  C. telegram_importer.py  Historical JSON/TXT/HTML export parser,
+                       keyword pre-filter, batch processing,
+                       SSE progress streamed to /api/import/upload.
+
+PIPELINE (services/message_pipeline.py):
+  content-hash dedup -> store raw message -> classify_and_extract()
+  -> process_extraction() -> Telegram alert. Failed extractions keep
+  the raw row + processing_error for retry; duplicate placement
+  messages without an opportunity get retried once.
+
+AI LAYER (services/ai_service.py):
+  Local NLP extractor (nlp_extractor.py, 755 lines: spaCy NER if
+  installed, dateparser date anchoring to original message timestamp,
+  company corpus + blacklist, regex field patterns) ALWAYS runs.
+  Gemini Flash is an OPTIONAL enhancer; escalates to Pro below
+  confidence_threshold=0.70; 429-aware retries; hallucination guards
+  for company/role; merge prefers local for identity fields.
+  Works fully offline with GEMINI_ENABLED=false.
+
+STATE ENGINE (services/opportunity_engine.py):
+  Dedup Layer 1 exact signature (company|role|normalized URL),
+  Layer 2 RapidFuzz token_set_ratio >= 75 vs recent opps.
+  Creates/updates opportunities, logs event timeline
+  (opportunity_events), detects deadline extensions ->
+  reschedules reminders, recomputes eligibility each update.
+
+DEADLINES & REMINDERS:
+  deadline_engine.py: EXPIRED/TODAY(<=3h)/WITHIN_24H/TOMORROW/
+  WITHIN_3_DAYS/THIS_WEEK/UPCOMING/NO_DEADLINE, all UTC-computed,
+  IST-displayed. reminder_service.py schedules 3-day/24h/3h alerts,
+  cancels on APPLIED/IGNORED, reschedules on extension.
+  scheduler.py jobs: reminder check every 15 min, daily summary at
+  08:00 IST, watchdog every 30 min, message purge 03:15 IST
+  (retention 3 days).
+
+ELIGIBILITY (services/eligibility_service.py):
+  Profile (branch/batch/CGPA/min CTC/locations/roles) stored in
+  app_settings -> per-opportunity ELIGIBLE/NOT_ELIGIBLE/UNCLEAR +
+  relevance_score 0-100 + itemized checks. Never hides opportunities.
+
+API (all verified):
+  POST /api/auth/login, GET /api/auth/me
+  GET  /api/opportunities            (status/category/eligibility/
+                                      search/days/cse_only/urgency)
+  GET  /api/opportunities/stats | /meta/briefing | /meta/calendar
+  GET  /api/opportunities/{id} | /{id}/timeline
+  PATCH /api/opportunities/{id}/status   DELETE /{id}
+  GET  /api/opportunities/messages          (raw inbox inspection)
+  GET  .../messages/{id}/attachment         (retained source file)
+  GET  /api/opportunities/{id}/source-document
+  GET  /api/reminders
+  GET/POST /api/settings/profile | /system_config
+  POST /api/settings/scan_history    GET /api/settings/system
+  POST /api/import/upload (SSE)      GET  /api/import/status
+  GET  /api/health                   Docs at /docs
+
+FRONTEND (React 19, dark glassmorphism):
+  Login (credentials + 5-digit code) -> JWT in localStorage.
+  Pages: Dashboard (greeting + briefing + stat cards + urgent lists),
+  Opportunities (search/filter), OpportunityDetail (timeline +
+  MatchScore + source doc), Applications, CalendarView, Messages
+  inbox, Reminders, Import (drag-drop + SSE progress), Settings
+  (profile + system config + scan trigger). Protected routes via
+  useAuth; axios interceptor attaches Bearer token.
+
+3. WHAT IS DONE AND WORKING
+------------------------------------------------------------------------
+[x] End-to-end ingestion: live listener, forwarded messages, historical import
+[x] Offline-first extraction (no API key needed) + optional Gemini escalation
+[x] Timestamp-anchored date resolution (critical for imports)
+[x] Hash-based message dedup + fuzzy/signature opportunity dedup
+[x] Deadline-extension detection with timeline preservation + reminder rescheduling
+[x] Full Telegram bot command surface + inline actions
+[x] Reminder lifecycle (3d/24h/3h, cancel-on-applied)
+[x] Eligibility profile + relevance scoring surfaced in UI
+[x] Dashboard briefing, calendar, stats endpoints
+[x] Raw-message inbox with attachment download + error visibility
+[x] Watchdog + health endpoint reporting userbot liveness
+[x] Tests: backend/tests/test_nlp_extractor.py — 5/5 PASS (verified run)
+
+4. GAPS FOUND (VERIFIED, ORDERED BY SEVERITY)
+------------------------------------------------------------------------
+CRITICAL BUGS
+G1. services/ai_service.py uses re.search in _validate_gemini_company
+    (_validate_gemini_role) but NEVER imports re -> guaranteed
+    NameError crash of the whole extraction whenever Gemini mode is
+    enabled and returns a company/role candidate. Latent today only
+    because GEMINI_ENABLED=false by default.
+G2. NO AUTHORIZATION ON DATA APIs. auth.py issues JWTs, but none of
+    the opportunities/import/reminders/settings routers depend on the
+    token. Anyone who can reach port 8000 can read every message,
+    delete opportunities, upload arbitrary files, change the profile.
+    Login page is theater, not security.
+G3. Secrets hygiene: auth.py falls back to hardcoded credentials
+    (sunil / Sunil@369 / 48411 / super-secret-key-369) AND README.md
+    publishes those same real-looking values in its example .env block.
+    Any repo push leaks working credentials.
+G4. requirements.txt is MISSING PyJWT while api/routes/auth.py does
+    `import jwt`. Works on this machine only because it was pip-installed
+    ad hoc; fresh install => backend crashes on first request.
+G5. Opportunities pagination bug (api/routes/opportunities.py:89-104):
+    `urgency` filter is applied AFTER skip/limit slicing, so filtered
+    pages return partial/wrong results and `total` ignores the filter.
+
+HIGH PRIORITY GAPS
+G6. Sign Out button (frontend/src/components/Navbar.jsx:54) calls
+    window.location.reload() — never clears the token or logs out.
+G7. README.md drift: documents GET /api/opportunities/meta/analytics,
+    an Analytics.jsx page, "Weekly drive trends/top skills/apply rate"
+    analytics feature, and pdfplumber-based local_extractor — none of
+    the analytics parts exist; Analytics.jsx is absent; App.jsx has no
+    /analytics route. Docs oversell the product.
+G8. No .env.example anywhere although README says `cp .env.example .env`;
+    spaCy model (en_core_web_sm) needs `python -m spacy download ...`
+    which is nowhere documented as setup step (only runtime warning).
+G9. Version control hazard: backend/ contains its own .git with a
+    divergent commit history while the outer repo also tracks 45
+    backend files — two conflicting histories for the same code.
+G10. Broken/polluted frontend build config: package.json build script is
+     "tsc && vite build" on a pure-JSX project littered with Vite-TS
+     template leftovers (src/main.ts, src/counter.ts, src/style.css,
+     tsconfig.json, typescript.svg/vite.svg); index.html still titled
+     "frontend" and references /favicon.svg.
+
+MEDIUM PRIORITY GAPS
+G11. Plan-vs-build feature gaps (docs/plan1.txt):
+     - Analytics module (Phase 5 item 34) — completely missing.
+     - Image/screenshot OCR (Phase 3) — images silently dropped; only
+       text + PDF/doc handled.
+     - Search/filter parity: no CTC-range, branch, or location filters
+       on the list endpoint (plan §20 promises them).
+     - Layer-3 "Gemini tie-breaker" dedup is commented as existing but
+       is NOT implemented anywhere.
+G12. /api/import/status reports "imported_last_24h" by counting
+     HISTORICAL-source rows whose message_date is within 24h — that's
+     the message's original send time, not import time; and with 3-day
+     message retention the counts vanish anyway.
+G13. Dead/clutter code hurting maintainability:
+     - unused _serialize() with fragile operator-precedence expression
+       (routes/opportunities.py:21-29);
+     - debug scripts at backend root: check.py, check_db.py,
+       check_errors.py, check_latest.py, check_missing.py,
+       update_rocked.py, test_ai.py;
+     - stale root docs rev.txt / review.txt claiming "100% complete /
+       ALL SYSTEMS NOMINAL" — contradicted by G1-G5;
+     - stray .pytest_cache dirs in root/frontend.
+G14. Test coverage: exactly one test file (NLP extractor). Zero tests
+     for opportunity_engine dedup/update logic, deadline_engine,
+     reminder lifecycle, importer parsers, or any API route.
+G15. Deployment readiness: CORS hardcoded to localhost origins
+     (config.py:51), no Dockerfile/service guide, in-memory AI hash
+     cache resets each restart, single-process design (scheduler +
+     userbot + bot + API must share one uvicorn process).
+
+LOW / NOTES
+G16. Mixed naive/aware datetimes handled ad hoc via helpers — works but
+     fragile; a single tz-normalization utility pass would de-risk it.
+G17. KNOWN_COMPANIES corpus contains duplicate entry ("rocked" twice)
+     and blacklist includes "google" which also exists as a real
+     company — ordering of checks decides behavior; document intent.
+G18. Pydantic class-based Config deprecated (warning on test run);
+     migrate to ConfigDict before pydantic v3.
+
+5. RECOMMENDED TASK PLAN (START HERE)
+----------------------------------------------------------------========
+PHASE A — STOP THE BLEEDING (correctness & security, ~half day)
+ T1. Add `import re` to services/ai_service.py; add a regression test
+     calling _validate_gemini_company/_validate_gemini_role.
+ T2. Enforce JWT on every router: add a require_auth dependency
+     (reuse HTTPBearer logic from auth.py) to opportunities, import_,
+     reminders, settings routers; make /api/health public; teach the
+     frontend SSE upload (fetch in client.js) to send the Bearer token.
+ T3. Move admin credentials/JWT secret to REQUIRED env vars (fail fast
+     if unset), scrub real values out of README.md, add backend/.env.example
+     template, document `python -m spacy download en_core_web_sm`.
+ T4. Add PyJWT (+ PyJWT pinned) to requirements.txt.
+ T5. Fix pagination: apply urgency via computed field post-query OR
+     pre-filter deadlines in Mongo ($gte window math per bucket) and
+     paginate correctly with accurate totals.
+
+PHASE B — PRODUCT INTEGRITY (~1 day)
+ T6. Real sign-out: useAuth.logout clearing token + redirect; wire to
+     Navbar button.
+ T7. Fix frontend build: drop tsc from build script, delete TS scaffold
+     files (main.ts, counter.ts, style.css, stray assets/tsconfig),
+     set proper <title> and favicon.
+ T8. Resolve nested repo: fold backend/.git history into outer repo
+     (or extract patches then remove backend/.git); single source of truth.
+ T9. Clean clutter: delete/archive check_*.py, update_rocked.py;
+     replace rev.txt/review.txt with this status.txt; remove .pytest_cache.
+ T10. Truthful README: remove analytics claims or implement T13 first;
+      align API table with reality; correct tech-stack notes.
+
+PHASE C — CLOSE PLAN GAPS (features, 2-4 days)
+ T11. Implement Layer-3 Gemini dedup tie-breaker for the 50-75 fuzzy
+      band (or delete the claim and lower threshold docs accordingly).
+ T12. Add CTC-range / branch / location filters to list endpoint +
+      Opportunities.jsx UI.
+ T13. Build Analytics: GET /api/opportunities/meta/analytics
+      (weekly drive counts, top skills, apply-rate, CSE split,
+      avg confidence) + Analytics.jsx page + nav link.
+ T14. Retry queue UI/API: expose processing_error messages for one-
+      click reprocess (pipeline already stores errors).
+ T15. Import status fix: track import runs (started_at/completed_at,
+      counters) in a dedicated collection instead of message_date math.
+
+PHASE D — ROBUSTNESS & RELEASE (ongoing)
+ T16. Tests: opportunity_engine (create vs update vs extension),
+      deadline_engine buckets, reminder lifecycle, importer parsers
+      (JSON/TXT/HTML fixtures), auth flow, pagination fix.
+ T17. TZ normalization utility + adopt everywhere naive datetimes are
+      produced/consumed.
+ T18. Deployment pack: Dockerfile(s)+compose (mongo+backend+frontend),
+      prod CORS env var, session-string provisioning doc, backup note.
+ T19. Optional Phase-3 item: image announcements via Gemini vision
+      (guard with feature flag) — only after T1-T18 land.
+
+SUCCESS CRITERIA FOR PHASE A EXIT
+ - Fresh clone: pip install -r requirements.txt && uvicorn boot works.
+ - curl without token on /api/opportunities => 401.
+ - Gemini-enabled extraction no longer raises NameError.
+ - Urgency-filtered listing paginates correctly.
+
+========================================================================
+BOTTOM LINE
+The core product loop (ingest -> extract -> dedup -> remind -> act)
+is genuinely built end-to-end and matches the plan's MVP+ phases well.
+What's missing is hardening: one latent crash bug (G1), decorative
+authentication (G2/G3), an incomplete dependency manifest (G4), a
+pagination defect (G5), docs that promise features that don't exist
+(G7), and repo/build hygiene (G8-G10). Do Phase A before anything else.
+========================================================================

@@ -15,6 +15,15 @@ from config import settings
 # Shared state — updated by the userbot on every received message
 _last_message_received: datetime | None = None
 _userbot_running: bool = False
+_started_at: datetime | None = None
+_selfheal_done: bool = False
+
+
+def mark_started():
+    """Record backend startup — enables the deaf-listener self-heal check."""
+    global _started_at
+    if _started_at is None:
+        _started_at = datetime.now(timezone.utc)
 
 
 def record_message_received():
@@ -37,6 +46,7 @@ async def run_watchdog_check():
     Called by the scheduler every watchdog_interval_minutes.
     Sends an alert if the userbot seems silent or disconnected.
     """
+    global _selfheal_done
     from services.notification_service import send_watchdog_alert
 
     if not _userbot_running:
@@ -48,7 +58,27 @@ async def run_watchdog_check():
         return
 
     if _last_message_received is None:
-        # System just started, no messages yet — not necessarily a problem
+        # Dangerous silent case: listener claims to run but has NEVER received
+        # anything. After 2x the watchdog interval, alert once and auto-heal by
+        # re-running the catch-up history scan (covers downtime + dead sessions).
+        if (
+            _started_at is not None
+            and not _selfheal_done
+            and datetime.now(timezone.utc) - _started_at
+                > timedelta(minutes=settings.watchdog_interval_minutes * 2)
+        ):
+            _selfheal_done = True
+            await send_watchdog_alert(
+                "⚠️ No live message received since startup. The listener may be "
+                "deaf (stale session / quiet group). Auto-running a catch-up "
+                "history scan now."
+            )
+            try:
+                from userbot import trigger_manual_history_scan
+
+                await trigger_manual_history_scan(days=settings.catchup_days)
+            except Exception as heal_err:
+                print(f"[Watchdog] Self-heal scan failed: {heal_err}")
         return
 
     now = datetime.now(timezone.utc)

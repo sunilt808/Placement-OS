@@ -54,5 +54,24 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
+# Test & tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+logs/
+
+# Stray session artifacts anywhere in the repo
+**/*.session
+**/*.session-journal
+
 # Runtime source documents downloaded from placement messages
 backend/data/documents/
+
+# Local scratch notes (keep strps.txt + README tracked)
+scratch/
+todo.local.md

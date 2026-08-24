@@ -95,9 +95,23 @@ async def _run_message_cleanup():
     await purge_expired_messages(settings.message_retention_days)
 
 
+async def _run_lifecycle_cleanup():
+    """Auto-expire overdue drives + cancel zombie reminders."""
+    from services.lifecycle_janitor import run_lifecycle_cleanup
+    try:
+        expired = await run_lifecycle_cleanup(settings.expiry_grace_hours)
+        if expired:
+            print(f"[Scheduler] Lifecycle janitor expired {expired} stale drive(s)")
+    except Exception as e:
+        print(f"[Scheduler] Lifecycle cleanup error: {e}")
+
+
 def start_scheduler():
     """Initialize and start the APScheduler."""
     global _scheduler
+    from services.watchdog import mark_started
+
+    mark_started()
     _scheduler = AsyncIOScheduler(timezone=IST)
 
     # Reminder check every 15 minutes
@@ -133,8 +147,16 @@ def start_scheduler():
         replace_existing=True,
     )
 
+    # Lifecycle janitor — hourly auto-expiry + reminder hygiene
+    _scheduler.add_job(
+        _run_lifecycle_cleanup,
+        trigger=IntervalTrigger(hours=1),
+        id="lifecycle_cleanup",
+        replace_existing=True,
+    )
+
     _scheduler.start()
-    print(f"[Scheduler] Started. Reminder check: every 15min | Daily summary: {settings.daily_summary_hour}:00 IST | Watchdog: every {settings.watchdog_interval_minutes}min")
+    print(f"[Scheduler] Started. Reminder check: every 15min | Daily summary: {settings.daily_summary_hour}:00 IST | Watchdog: every {settings.watchdog_interval_minutes}min | Janitor: hourly")
 
 
 def stop_scheduler():

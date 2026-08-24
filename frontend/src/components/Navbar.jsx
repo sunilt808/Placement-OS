@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Briefcase, Calendar as CalendarIcon, CheckSquare, Settings, LogOut, ShieldAlert, MessagesSquare } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const NAV_LINKS = [
-  { path: '/', label: 'Command Center', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
   { path: '/opportunities', label: 'All Opportunities', icon: Briefcase },
   { path: '/applications', label: 'My Applications', icon: CheckSquare },
   { path: '/calendar', label: 'Calendar View', icon: CalendarIcon },
@@ -15,6 +16,7 @@ const SYS_LINKS = [
 ];
 
 export default function Navbar() {
+  const { logout } = useAuth();
   return (
     <nav className="sidebar">
       <div className="sidebar-brand">
@@ -29,7 +31,6 @@ export default function Navbar() {
             key={link.path} 
             to={link.path} 
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-            end={link.path === '/'}
           >
             <link.icon className="nav-icon" size={18} />
             {link.label}
@@ -51,7 +52,7 @@ export default function Navbar() {
         <button className="nav-item" style={{ 
           border: 'none', width: '100%', background: 'transparent', 
           textAlign: 'left', cursor: 'pointer', marginTop: 8 
-        }} onClick={() => window.location.reload()}>
+        }} onClick={() => logout()}>
           <LogOut className="nav-icon" size={18} />
           Sign Out
         </button>

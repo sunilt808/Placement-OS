@@ -24,7 +24,7 @@ from models.opportunity import (
 )
 from services.deadline_engine import get_urgency, reminder_times
 from services.reminder_service import schedule_reminders
-from services.eligibility_service import compute_eligibility
+from services.eligibility_service import compute_eligibility, classify_cse_signal
 
 # Fuzzy similarity threshold — below this = likely different opportunity
 FUZZY_MATCH_THRESHOLD = 75
@@ -75,6 +75,35 @@ async def _find_existing_by_signature(extraction: AIExtraction) -> Optional[dict
             opp.get("company"), opp.get("role"), opp.get("registration_link")
         )
         if sig == existing_sig and sig != "||":
+            return opp
+    return None
+
+
+async def _find_existing_by_company(extraction: AIExtraction) -> Optional[dict]:
+    """Layer 1.5: Same-company convergence.
+
+    A single drive typically spans MULTIPLE posts (announcement, JD PDF,
+    Google Form link, shortlist, deadline extension). Role phrasing and
+    links vary between posts, so exact signatures miss them. Matching on
+    normalized COMPANY identity within a recent window ties every artifact
+    of one recruiter to ONE opportunity.
+    """
+    if not extraction.company:
+        return None
+    company_key = _normalize_company(extraction.company)
+    # Too-generic keys must not swallow unrelated drives
+    if len(company_key) < 5:
+        return None
+
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff -= timedelta(days=45)
+
+    col = opportunities_col()
+    cursor = col.find({"created_at": {"$gte": cutoff}})
+    async for opp in cursor:
+        if _normalize_company(opp.get("company")) == company_key:
             return opp
     return None
 
@@ -144,6 +173,17 @@ async def _create_opportunity(extraction: AIExtraction, message_id: str) -> str:
     }
     result = await col.insert_one(doc)
     opp_id = str(result.inserted_id)
+
+    # Role-first CSE signal (stored -> filterable at Mongo level)
+    signal = classify_cse_signal(extraction.role, extraction.eligible_branches)
+    await col.update_one(
+        {"_id": result.inserted_id},
+        {"$set": {
+            "role_class": signal["role_class"],
+            "role_class_reason": signal["role_class_reason"],
+            "has_registration_form": bool(getattr(extraction, "has_registration_form", False)),
+        }}
+    )
 
     # Log CREATED event
     await _log_event(OpportunityEvent(
@@ -225,12 +265,36 @@ async def _update_opportunity(opp: dict, extraction: AIExtraction, message_id: s
             new_value=extraction.summary,
             message_id=message_id,
         ))
+    else:
+        # Follow-up posts (JD PDF, form link, clarification) must still leave
+        # a visible trace on the drive's unified timeline.
+        await _log_event(OpportunityEvent(
+            opportunity_id=opp_id,
+            event_type=EventType.UPDATE_RECEIVED,
+            new_value=(extraction.summary or "Follow-up received")[:300],
+            message_id=message_id,
+        ))
 
     # ── Add message ID to source list and update eligibility ──────────────
     eligibility = await compute_eligibility({**opp, **updates})
     updates["eligibility_status"] = eligibility["eligibility_status"]
     updates["relevance_score"] = eligibility["relevance_score"]
     updates["eligibility_checks"] = eligibility["checks"]
+
+    # Re-classify role signal — updates may have filled in role/branches
+    final_role = updates.get("role", opp.get("role"))
+    final_branches = opp.get("eligible_branches")
+    signal = classify_cse_signal(final_role, final_branches)
+    updates["role_class"] = signal["role_class"]
+    updates["role_class_reason"] = signal["role_class_reason"]
+
+    # ── Registration-form signals from follow-ups (JD/form posts) ────────────
+    if getattr(extraction, "has_registration_form", False):
+        updates["has_registration_form"] = True
+    if getattr(extraction, "action_required", False):
+        updates["action_required"] = True
+    if updates.get("has_registration_form") or updates.get("action_required"):
+        updates["updated_at"] = datetime.utcnow()
 
     await col.update_one(
         {"_id": opp["_id"]},
@@ -264,10 +328,27 @@ async def process_extraction(
     # Data Quality Rule: Require at least company OR role
     if not extraction.company and not extraction.role:
         print("[Opportunity] Skipped — insufficient data (missing both company and role)")
-        return None
+        actionable_update = extraction.deadline or extraction.category in {
+            OpportunityCategory.SHORTLIST,
+            OpportunityCategory.ASSESSMENT,
+            OpportunityCategory.INTERVIEW,
+            OpportunityCategory.DEADLINE_UPDATE,
+        }
+        if actionable_update:
+            extraction.company = "Placement Cell Update"
+        if not actionable_update:
+            return None
+        extraction.summary = extraction.summary or (
+            "Action required: review the placement-cell announcement and its attachments."
+        )
+        print("[Opportunity] Creating actionable update without company/role details")
 
     # Layer 1: Signature match
     existing = await _find_existing_by_signature(extraction)
+
+    # Layer 1.5: Same-company convergence (JD/form/shortlist follow-ups)
+    if not existing:
+        existing = await _find_existing_by_company(extraction)
 
     # Layer 2: Fuzzy match (only if no signature match)
     if not existing:

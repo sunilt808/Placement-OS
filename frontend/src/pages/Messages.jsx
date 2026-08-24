@@ -7,8 +7,12 @@ const categoryLabel = (value) => (value || 'PENDING').replaceAll('_', ' ');
 
 function formatDate(value) {
   if (!value) return 'Unknown date';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  });
 }
 
 export default function Messages() {
@@ -18,18 +22,20 @@ export default function Messages() {
   const [filters, setFilters] = useState({ search: '', placement_only: false, has_error: false });
 
   useEffect(() => {
-    const timer = setTimeout(async () => {
+    let active = true;
+    const loadMessages = async () => {
       setLoading(true);
       try {
         const data = await getMessages({ ...filters, search: filters.search || undefined, limit: 100 });
-        setMessages(data.messages || []);
+        if (active) setMessages(data.messages || []);
       } catch (error) {
         console.error('Could not load messages', error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    }, 250);
-    return () => clearTimeout(timer);
+    };
+    loadMessages();
+    const interval = setInterval(loadMessages, 30000);
   }, [filters]);
 
   const stats = useMemo(() => ({

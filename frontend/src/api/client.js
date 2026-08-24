@@ -18,6 +18,18 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ── Opportunities ─────────────────────────────────────────────────────────────
 
 export const getOpportunities = (params = {}) =>
@@ -78,10 +90,19 @@ export const uploadExport = async (file, onProgress) => {
   const formData = new FormData();
   formData.append('file', file);
 
+  const headers = {};
+  const token = localStorage.getItem('token');
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const response = await fetch(`${API_BASE}/api/import/upload`, {
     method: 'POST',
+    headers,
     body: formData,
   });
+
+  if (!response.ok) {
+    throw new Error(`Import failed: ${response.status} ${response.statusText}`);
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
