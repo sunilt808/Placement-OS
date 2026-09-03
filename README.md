@@ -1,4 +1,7 @@
 # 🎯 PlacementOS — AI Placement Intelligence Monitor
+<a href="https://deepwiki.com/sunilt808/PlacementOS">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki">
+</a>
 
 > A self-hosted, single-user placement assistant that watches your college
 > placement Telegram group 24/7, reads every message / PDF / Excel sheet /
