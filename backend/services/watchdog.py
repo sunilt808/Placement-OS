@@ -17,6 +17,7 @@ _last_message_received: datetime | None = None
 _userbot_running: bool = False
 _started_at: datetime | None = None
 _selfheal_done: bool = False
+_userbot_error: str | None = None
 
 
 def mark_started():
@@ -33,8 +34,20 @@ def record_message_received():
 
 
 def set_userbot_running(running: bool):
-    global _userbot_running
+    global _userbot_running, _userbot_error
     _userbot_running = running
+    if running:
+        _userbot_error = None
+
+
+def set_userbot_error(error: str):
+    """Record the latest listener failure for logs and the health endpoint."""
+    global _userbot_error
+    _userbot_error = error
+
+
+def get_userbot_error() -> str | None:
+    return _userbot_error
 
 
 def get_last_received() -> datetime | None:

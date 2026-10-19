@@ -22,8 +22,9 @@ async def lifespan(app: FastAPI):
 
     userbot_task = None
     try:
-        from userbot import start_userbot
-        userbot_task = asyncio.create_task(start_userbot())
+        from userbot import run_userbot_forever
+        userbot_task = asyncio.create_task(run_userbot_forever())
+        print("[Main] Telegram userbot supervisor started")
     except Exception as e:
         print(f"[Main] Userbot error: {e}")
 
@@ -120,11 +121,27 @@ apply_docs_policy(app)
 @app.get("/api/health")
 async def health():
     try:
-        from services.watchdog import get_last_received, _userbot_running
+        from services.watchdog import (
+            get_last_received,
+            get_userbot_error,
+            _userbot_running,
+        )
         last = get_last_received()
-        return {"status": "ok", "userbot_running": _userbot_running, "last_message": last.isoformat() if last else None}
-    except:
-        return {"status": "ok", "userbot_running": False}
+        userbot_running = _userbot_running
+        return {
+            "status": "ok" if userbot_running else "degraded",
+            "userbot_running": userbot_running,
+            "last_message": last.isoformat() if last else None,
+            "userbot_error": get_userbot_error(),
+        }
+    except Exception as error:
+        print(f"[Health] Could not read userbot status: {error}")
+        return {
+            "status": "degraded",
+            "userbot_running": False,
+            "last_message": None,
+            "userbot_error": f"{type(error).__name__}: {error}",
+        }
 
 if __name__ == "__main__":
     import uvicorn

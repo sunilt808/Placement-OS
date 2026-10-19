@@ -261,6 +261,9 @@ The frontend dev server expects the API on **port 8000**
    leave `DOCS_ENABLED=false`.
 6. **Telegram**: run `setup_session.py` once on the deploy machine, press
    START on the bot from your account, and confirm the startup ping arrives.
+7. **Health check**: `/api/health` reports `userbot_running`, `last_message`,
+   and `userbot_error`; a healthy API response alone does not prove Telegram
+   ingestion is connected.
 
 ## 💬 Telegram Bot Commands
 

@@ -19,6 +19,7 @@ from services.message_pipeline import ingest_message
 from services.watchdog import (
     record_message_received,
     set_userbot_running,
+    set_userbot_error,
 )
 from services.pdf_service import download_and_extract_pdf
 from services.excel_service import (
@@ -176,6 +177,7 @@ async def start_userbot():
     # ---------------------------------------------------------
 
     if not settings.telegram_api_id or not settings.telegram_api_hash:
+        set_userbot_error("TELEGRAM_API_ID or TELEGRAM_API_HASH is not configured")
         print(
             "[Userbot] No API credentials found — skipping userbot.\n"
             "[Userbot] Set TELEGRAM_API_ID and TELEGRAM_API_HASH in .env"
@@ -187,6 +189,7 @@ async def start_userbot():
     # ---------------------------------------------------------
 
     if not settings.telegram_session_string:
+        set_userbot_error("TELEGRAM_SESSION_STRING is not configured")
         print(
             "[Userbot] No session string found.\n"
             "[Userbot] Run: python setup_session.py"
@@ -198,6 +201,7 @@ async def start_userbot():
     # ---------------------------------------------------------
 
     if not settings.placement_group_id:
+        set_userbot_error("PLACEMENT_GROUP_ID is not configured")
         print(
             "[Userbot] ERROR: PLACEMENT_GROUP_ID is not set in .env"
         )
@@ -359,13 +363,47 @@ async def start_userbot():
         print("[Userbot] Waiting for new messages...")
 
         await _client.run_until_disconnected()
+        set_userbot_running(False)
+        set_userbot_error("Telegram client disconnected")
 
     except Exception as error:
         set_userbot_running(False)
+        set_userbot_error(f"{type(error).__name__}: {error}")
 
         print(
-            f"[Userbot] FATAL ERROR: {error}"
+            f"[Userbot] FATAL ERROR ({type(error).__name__}): {error}"
         )
+        raise
+
+
+async def run_userbot_forever():
+    """Keep the listener alive after transient Telegram/network failures."""
+    retry_delay = 15
+
+    if (
+        not settings.telegram_api_id
+        or not settings.telegram_api_hash
+        or not settings.telegram_session_string
+        or not settings.placement_group_id
+    ):
+        await start_userbot()
+        return
+
+    while True:
+        try:
+            await start_userbot()
+            print(
+                f"[Userbot] Listener stopped unexpectedly; "
+                f"retrying in {retry_delay}s."
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            print(
+                f"[Userbot] Listener crashed ({type(error).__name__}): {error}. "
+                f"Retrying in {retry_delay}s."
+            )
+        await asyncio.sleep(retry_delay)
 
 
 async def stop_userbot():
