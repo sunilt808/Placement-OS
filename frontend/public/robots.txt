@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /opportunities
+Disallow: /applications
+Disallow: /calendar
+Disallow: /messages
+Disallow: /reminders
+Disallow: /settings
+Disallow: /import
+Disallow: /gemini
+Disallow: /login
+
+Sitemap: https://placement-os-rust.vercel.app/sitemap.xml
