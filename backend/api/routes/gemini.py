@@ -79,7 +79,8 @@ async def chat(body: ChatRequest):
         dl = d.get("deadline")
         rows.append(
             f"- {d.get('company') or '?'} | role: {d.get('role') or '?'} | "
-            f"deadline: {dl:%d %b %Y} | status: {d.get('status')} | "
+            f"deadline: {dl.strftime('%d %b %Y') if dl else 'none'} | "
+            f"status: {d.get('status') or 'unknown'} | "
             f"form: {'yes' if d.get('has_registration_form') else 'no'}"
         )
     context = (
