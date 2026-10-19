@@ -224,10 +224,16 @@ async def start_userbot():
         )
 
         # -----------------------------------------------------
-        # 5. Connect existing session
+        # 5. Connect the existing session without interactive login
         # -----------------------------------------------------
 
-        await _client.start()
+        await _client.connect()
+        if not await _client.is_user_authorized():
+            raise RuntimeError(
+                "TELEGRAM_SESSION_STRING is not authorized. "
+                "Generate a fresh StringSession with setup_session.py "
+                "and update the Render environment variable."
+            )
 
         set_userbot_running(True)
 
