@@ -51,3 +51,7 @@ services:
       # ── Gemini (optional) ─────────────────────────────────────────────────
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_FLASH_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_PRO_MODEL
+        value: gemini-2.5-pro

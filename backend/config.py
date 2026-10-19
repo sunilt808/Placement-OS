@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     student_usn: str = "1DS24CS421"
 
     # ── Gemini model names ────────────────────────────────────────────────────
-    gemini_flash_model: str = "gemini-3.6-flash"
-    gemini_pro_model: str = "gemini-3.1-pro-preview"
+    gemini_flash_model: str = "gemini-2.5-flash"
+    gemini_pro_model: str = "gemini-2.5-pro"
 
     # Confidence threshold below which we escalate to the pro model
     confidence_threshold: float = 0.70
