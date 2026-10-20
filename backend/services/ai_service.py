@@ -23,14 +23,15 @@ from services.nlp_extractor import extract_with_nlp
 _flash_model = None
 _pro_model = None
 
+_gemini_client = None
 try:
-    import google.generativeai as genai
-    from google.generativeai.types import GenerationConfig
+    from google import genai
+    from google.genai import types as genai_types
     if (settings.gemini_api_key
             and settings.gemini_api_key != "YOUR_GEMINI_API_KEY"):
-        genai.configure(api_key=settings.gemini_api_key)
-        _flash_model = genai.GenerativeModel(settings.gemini_flash_model)
-        _pro_model = genai.GenerativeModel(settings.gemini_pro_model)
+        _gemini_client = genai.Client(api_key=settings.gemini_api_key)
+        _flash_model = settings.gemini_flash_model
+        _pro_model = settings.gemini_pro_model
 except Exception as e:
     print(f"[AI] Gemini init failed: {e} — local-only mode")
 
@@ -119,21 +120,74 @@ Analyze the actual role and JD content — not just the company name.
 """
 
 
+# Lightweight fallback chain used when a model is overloaded (503) or retired (404)
+_FALLBACK_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+]
+
+
+def _is_unavailable(err_str: str) -> bool:
+    s = err_str.lower()
+    return ("503" in err_str or "unavailable" in s or "high demand" in s
+            or "not found" in s or "no longer available" in s or "404" in err_str
+            or "overloaded" in s)
+
+
+def _extract_text(response) -> str:
+    """Safely join all text parts of a response (handles multi-part/thinking replies)."""
+    try:
+        text = response.text
+        if text:
+            return text
+    except Exception:
+        pass
+    parts = []
+    candidates = getattr(response, "candidates", None) or []
+    for cand in candidates:
+        content = getattr(cand, "content", None)
+        for part in (getattr(content, "parts", None) or []):
+            t = getattr(part, "text", None)
+            if t:
+                parts.append(t)
+    return "".join(parts)
+
+
+async def _generate_with_fallback(model: str, full_prompt: str):
+    """Call generate_content, falling back across models on 503/404 errors."""
+    candidates = [model] + [m for m in _FALLBACK_MODELS if m != model]
+    last_err = None
+    for name in candidates:
+        try:
+            response = await asyncio.to_thread(
+                _gemini_client.models.generate_content,
+                model=name,
+                contents=full_prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+            if name != model:
+                print(f"[AI] Using fallback model '{name}'")
+            return response
+        except Exception as e:
+            last_err = e
+            if _is_unavailable(str(e)):
+                print(f"[AI] Model '{name}' unavailable, trying next...")
+                continue
+            raise e
+    raise last_err
+
+
 async def _call_gemini(model, prompt: str, system: str) -> dict:
     """Call Gemini model with retry on rate limits and parse JSON response."""
     full_prompt = f"{system}\n\n{prompt}"
     for attempt in range(3):
         try:
-            from google.generativeai.types import GenerationConfig
-            response = await asyncio.to_thread(
-                model.generate_content,
-                full_prompt,
-                generation_config=GenerationConfig(
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                ),
-            )
-            raw = response.text.strip()
+            response = await _generate_with_fallback(model, full_prompt)
+            raw = _extract_text(response).strip()
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):

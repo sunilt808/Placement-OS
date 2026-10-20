@@ -62,11 +62,15 @@ export default function GeminiPage() {
       const outOfCredits =
         e?.response?.status === 429 ||
         /quota|429|exhaust|resource.?limit|credit/i.test(detail);
+      const busy = e?.response?.status === 503 ||
+        /busy|unavailable|high demand|overload/i.test(detail);
       setMessages((m) => [...m, {
         role: 'ai', error: true,
         text: outOfCredits
           ? '⚠️ Gemini credits are used up for now — please try again a little later.'
-          : detail || 'Gemini request failed.',
+          : busy
+            ? '⏳ Gemini is busy right now (Google-side demand spike) — please try again in a moment.'
+            : detail || 'Gemini request failed.',
       }]);
     } finally {
       setBusy(false);

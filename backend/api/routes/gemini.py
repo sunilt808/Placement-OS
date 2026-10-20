@@ -97,17 +97,58 @@ async def chat(body: ChatRequest):
     )
 
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types as genai_types
 
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_flash_model)
+        client = genai.Client(api_key=settings.gemini_api_key)
+        _fallbacks = [settings.gemini_flash_model,
+                      "gemini-3.5-flash", "gemini-flash-latest",
+                      "gemini-2.5-flash-lite"]
+
+        def _extract_text(response) -> str:
+            try:
+                text = response.text
+                if text:
+                    return text
+            except Exception:
+                pass
+            parts = []
+            for cand in (getattr(response, "candidates", None) or []):
+                content = getattr(cand, "content", None)
+                for part in (getattr(content, "parts", None) or []):
+                    t = getattr(part, "text", None)
+                    if t:
+                        parts.append(t)
+            return "".join(parts)
 
         def _call():
-            return model.generate_content(prompt).text
+            last_err = None
+            tried = set()
+            for name in _fallbacks:
+                if name in tried:
+                    continue
+                tried.add(name)
+                try:
+                    resp = client.models.generate_content(
+                        model=name,
+                        contents=prompt,
+                        config=genai_types.GenerateContentConfig(temperature=0.2),
+                    )
+                    return _extract_text(resp)
+                except Exception as e:
+                    last_err = e
+                    s = str(e).lower()
+                    if ("503" in str(e) or "unavailable" in s
+                            or "high demand" in s or "not found" in s
+                            or "no longer available" in s or "404" in str(e)
+                            or "overloaded" in s):
+                        continue
+                    raise e
+            raise last_err
 
         answer = await asyncio.to_thread(_call)
     except ImportError:
-        raise HTTPException(500, "google-generativeai package not installed")
+        raise HTTPException(500, "google-genai package not installed")
     except Exception as e:
         msg = str(e)
         code = getattr(e, "code", None) or getattr(
@@ -117,6 +158,10 @@ async def chat(body: ChatRequest):
             raise HTTPException(
                 429, "Gemini credits are used up for now. "
                      "Please try again later.")
+        if "503" in msg or "UNAVAILABLE" in msg or "high demand" in msg.lower():
+            raise HTTPException(
+                503, "Gemini is busy right now (Google-side demand spike). "
+                     "Please try again in a moment.")
         raise HTTPException(502, f"Gemini call failed: {e}")
 
     return {"answer": (answer or "").strip(),
