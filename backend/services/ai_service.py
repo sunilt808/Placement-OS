@@ -262,37 +262,50 @@ def _validate_gemini_role(candidate: Optional[str], local_role: Optional[str]) -
 def merge_extractions(local: AIExtraction, gemini: AIExtraction) -> AIExtraction:
     """
     Merge Gemini's optional enhancement with our NLP local extraction.
-    - Local (NLP) wins on company/role via validation guards
-    - Gemini contributes semantic fields (location, better summary)
-    - Strict validation prevents Gemini hallucinations
+
+    LOCAL-FIRST policy: the local NLP result is the source of truth.
+    Gemini only FILLS GAPS — it never overrides a field the local
+    extractor already populated. This keeps the deterministic, offline
+    pipeline authoritative and prevents Gemini hallucination from
+    corrupting good local data.
     """
-    validated_company = _validate_gemini_company(gemini.company, local.company)
-    validated_role = _validate_gemini_role(gemini.role, local.role)
+    # Company/role: local wins unless local is empty, then use validated Gemini.
+    company = local.company or _validate_gemini_company(gemini.company, local.company)
+    role = local.role or _validate_gemini_role(gemini.role, local.role)
+
+    # Category: local wins. Gemini may only upgrade a local IRRELEVANT
+    # verdict (recall-first), never downgrade/override a real local category.
+    category = (
+        gemini.category
+        if local.category == OpportunityCategory.IRRELEVANT
+        and gemini.category != OpportunityCategory.IRRELEVANT
+        else local.category
+    )
 
     return AIExtraction(
-        category=gemini.category if gemini.category != OpportunityCategory.IRRELEVANT else local.category,
-        is_placement_related=gemini.is_placement_related or local.is_placement_related,
-        company=validated_company,
-        role=validated_role,
-        ctc=gemini.ctc or local.ctc,
-        location=gemini.location or local.location,
-        eligible_branches=gemini.eligible_branches or local.eligible_branches,
-        eligible_batch=gemini.eligible_batch or local.eligible_batch,
-        cgpa_requirement=gemini.cgpa_requirement or local.cgpa_requirement,
-        backlog_requirement=gemini.backlog_requirement or local.backlog_requirement,
-        experience_requirement=gemini.experience_requirement or local.experience_requirement,
-        deadline=gemini.deadline or local.deadline,
-        assessment_date=gemini.assessment_date or local.assessment_date,
-        interview_date=gemini.interview_date or local.interview_date,
+        category=category,
+        is_placement_related=local.is_placement_related or gemini.is_placement_related,
+        company=company,
+        role=role,
+        ctc=local.ctc or gemini.ctc,
+        location=local.location or gemini.location,
+        eligible_branches=local.eligible_branches or gemini.eligible_branches,
+        eligible_batch=local.eligible_batch or gemini.eligible_batch,
+        cgpa_requirement=local.cgpa_requirement or gemini.cgpa_requirement,
+        backlog_requirement=local.backlog_requirement or gemini.backlog_requirement,
+        experience_requirement=local.experience_requirement or gemini.experience_requirement,
+        deadline=local.deadline or gemini.deadline,
+        assessment_date=local.assessment_date or gemini.assessment_date,
+        interview_date=local.interview_date or gemini.interview_date,
         registration_link=local.registration_link or gemini.registration_link,
-        required_skills=gemini.required_skills or local.required_skills,
-        action_required=gemini.action_required or local.action_required,
-        summary=gemini.summary if gemini.summary and len(gemini.summary) > 20 else local.summary,
+        required_skills=local.required_skills or gemini.required_skills,
+        action_required=local.action_required or gemini.action_required,
+        summary=local.summary if local.summary and len(local.summary) > 20 else gemini.summary,
         confidence=max(gemini.confidence, local.confidence),
-        cse_relevance_score=max(gemini.cse_relevance_score, local.cse_relevance_score),
-        is_cse_relevant=gemini.is_cse_relevant or local.is_cse_relevant,
-        jd_cse_signals=gemini.jd_cse_signals or local.jd_cse_signals,
-        source_document=gemini.source_document or local.source_document,
+        cse_relevance_score=local.cse_relevance_score or gemini.cse_relevance_score,
+        is_cse_relevant=local.is_cse_relevant or gemini.is_cse_relevant,
+        jd_cse_signals=local.jd_cse_signals or gemini.jd_cse_signals,
+        source_document=local.source_document or gemini.source_document,
         telegram_message_date=local.telegram_message_date or gemini.telegram_message_date,
     )
 

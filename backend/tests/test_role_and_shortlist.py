@@ -5,9 +5,14 @@ Pure offline unit tests — no DB, no network.
 from services.eligibility_service import classify_cse_signal
 from services.excel_service import (
     _normalize_usn,
+    _usn_match_keys,
     _name_variants,
     is_spreadsheet,
     find_student_hit,
+)
+from services.pdf_service import (
+    _extract_spreadsheet_text,
+    _extract_legacy_doc,
 )
 
 
@@ -78,6 +83,46 @@ def test_usn_normalization():
     assert _normalize_usn("1ds24cs421") == "1DS24CS421"
     assert _normalize_usn("1DS 24 CS 421") == "1DS24CS421"
     assert _normalize_usn("1DS24-CS-421") == "1DS24CS421"
+
+
+def test_usn_match_keys_tolerant_of_missing_leading_digit():
+    # Sheet may drop the leading college digit (DS24CS421) — must still match.
+    keys = _usn_match_keys("1DS24CS421")
+    assert "1DS24CS421" in keys
+    assert "DS24CS421" in keys
+    # And the reverse: a bare "DS24CS421" also matches the full target form.
+    assert "1DS24CS421" in _usn_match_keys("DS24CS421")
+
+
+def test_find_student_when_sheet_omits_leading_digit():
+    rows = [
+        ["USN", "Name", "Status"],
+        ["DS24CS421", "Sunil T", "Shortlisted"],
+    ]
+    hit = find_student_hit(rows)
+    assert hit is not None
+    assert hit["matched_field"] == "USN"
+
+
+def test_spreadsheet_flattens_to_readable_text():
+    import io
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "JD"
+    ws.append(["Company", "Infosys"])
+    ws.append(["Role", "Software Engineer"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    text = _extract_spreadsheet_text(buf.getvalue())
+    assert "Infosys" in text
+    assert "Software Engineer" in text
+
+
+def test_legacy_doc_salvages_printable_text():
+    raw = b"\x00\x00Company Name\x00 Infosys is hiring Software Engineer\x00 apply now\x00" * 3
+    text = _extract_legacy_doc(raw)
+    assert "Infosys" in text
 
 
 def test_name_variants_cover_order_flip():

@@ -24,17 +24,19 @@ AI API keys required.
 | 🧑‍💼 **Excel Shortlist Finder** | Result sheets (.xlsx/.csv) scanned cell-by-cell for your USN/name → instant 🎉 shortlist Telegram alert |
 | 🎯 **Role-First CSE Engine** | 150+ CSE-family roles (SDE/FSD/QA/Data Analyst/DevOps…) matched even when branches aren't mentioned; verdicts `CSE_BOTH/CSE_ROLE/CSE_BRANCH/NOT_CSE/UNKNOWN` — unknowns are never hidden |
 | 📝 **Google Forms Detection** | `forms.gle` / `docs.google.com/forms` links auto-flagged as registration-required |
-| 🖼️ **Image OCR** | Photo posters read offline via Tesseract (pytesseract) |
-| 📄 **PDF/DOCX Reading** | JD text extracted locally; source file retained and downloadable |
+| 🖼️ **Image OCR** | Photo posters **and** image files (`.jpg/.png/.webp`) read offline via Tesseract; Gemini vision only as a fallback |
+| 📄 **Any-File Reading** | PDF, DOCX, legacy `.doc`, HTML, TXT, **Excel-as-text**, and images — text extracted locally; source file retained and downloadable |
 | ⏰ **Deadline Engine** | TODAY/WITHIN_24H/TOMORROW/… buckets computed in UTC, shown in IST; reminders at 3d/24h/3h |
 | 🔄 **Dedup + Timeline** | Signature + fuzzy dedup merges repeat posts into ONE drive with a full event timeline incl. deadline extensions |
 | ♻️ **Lifecycle Janitor** | Hourly auto-expiry of dead drives + zombie reminder cleanup |
 | 🔗 **Same-Company Merge** | JD PDFs, form links and follow-ups converge into ONE drive per recruiter — one timeline, no duplicate alerts |
 | 💾 **Storage Guardian** | Live quota meter (512 MB Atlas tier), Telegram warning at 450 MB, checklist bulk-delete, 25-day auto-purge |
 | ✨ **Gemini Assistant** | Opt-in chat page grounded in your live drive data — enable/disable buttons, answers only from stored facts |
-| 📊 **Dashboard** | Morning briefing, urgency stats, calendar, raw message inbox, import with SSE progress |
+| 📊 **Dashboard** | Morning briefing, urgency stats, calendar, raw message inbox, import with SSE progress, live system status |
 | 🧠 **Eligibility Profile** | Your branch/batch/CGPA → per-drive ELIGIBLE / UNCLEAR / NOT_ELIGIBLE verdicts + relevance score |
 | 🔐 **JWT Auth** | Single-admin login enforced on every data route |
+| 🛰️ **Free-Tier Hardening** | Non-blocking startup, DB timeouts + auto-reconnect, in-process keep-alive ping, `/api/health` never blocks |
+| 🩺 **Self-Diagnostics** | `scripts/diagnose.py` verifies the whole alert chain; bot auto-discovers your chat id (`/whoami`) |
 
 ---
 
@@ -108,11 +110,11 @@ AI API keys required.
 ```
 placement-tracker/
 ├── backend/                  # FastAPI + Python
-│   ├── main.py               # App entry, router wiring, lifespan (db/scheduler/userbot/bot)
+│   ├── main.py               # App entry, router wiring, NON-BLOCKING lifespan, /api/health
 │   ├── config.py             # pydantic-settings (env-driven)
-│   ├── database.py           # Async Motor/MongoDB + indexes
-│   ├── scheduler.py          # APScheduler: reminders, daily summary, watchdog, janitor
-│   ├── userbot.py            # Telethon listener + media router (pdf/excel/photo)
+│   ├── database.py           # Async Motor/MongoDB + timeouts, retries, reconnect watchdog, indexes
+│   ├── scheduler.py          # APScheduler: reminders, daily summary, watchdog, janitor, self-ping
+│   ├── userbot.py            # Telethon listener + media router (pdf/excel/photo/image)
 │   ├── telegram_bot.py       # Bot API: commands, forwards, documents, photos, callbacks
 │   ├── setup_session.py      # One-time Telethon session generator
 │   ├── api/routes/
@@ -126,8 +128,8 @@ placement-tracker/
 │   │   ├── nlp_extractor.py      # Offline extraction engine (spaCy/dateparser/regex)
 │   │   ├── eligibility_service.py# Role DB + role-first classifier + profile matching
 │   │   ├── excel_service.py      # Spreadsheet parse + student identity scan
-│   │   ├── image_ocr.py          # Offline pytesseract OCR
-│   │   ├── pdf_service.py        # PDF/DOCX/HTML/TXT text extraction + doc vault
+│   │   ├── image_ocr.py          # Offline pytesseract OCR (+ Gemini vision fallback)
+│   │   ├── pdf_service.py        # PDF/DOCX/.doc/HTML/TXT/Excel/image extraction + doc vault
 │   │   ├── opportunity_engine.py # Dedup layers, timeline, create/update logic
 │   │   ├── deadline_engine.py    # Urgency buckets + reminder times (IST-aware)
 │   │   ├── reminder_service.py   # Schedule/cancel/due reminders
@@ -194,6 +196,7 @@ npm run dev                                 # http://localhost:5173
 | `GEMINI_API_KEY` / `GEMINI_FLASH_MODEL` / `GEMINI_PRO_MODEL` | Optional. Extraction uses local NLP first; with a key present, Gemini enhances extraction, and the chat page unlocks after its own Enable press |
 | `DATA_RETENTION_DAYS` | Auto-delete messages + dead drives older than this (default `25`) |
 | `STORAGE_LIMIT_MB` / `STORAGE_WARN_MB` | Quota meter ceiling and Telegram warning line (default `512` / `450`) |
+| `SELF_PING_ENABLED` / `SELF_PING_INTERVAL_MINUTES` / `PUBLIC_BASE_URL` | Free-tier keep-alive (defaults `true` / `10` / Render API URL) |
 
 ---
 
@@ -215,8 +218,9 @@ npm run dev                                 # http://localhost:5173
 | GET | `/api/gemini/status` | Gemini chat toggle state + key presence |
 | POST | `/api/gemini/toggle` | Enable/disable the opt-in chat |
 | POST | `/api/gemini/chat` | Grounded Q&A over stored drives (429 = credits exhausted) |
-| GET | `/api/settings/profile` · `/system_config` · `/system` | Settings & health |
-| GET | `/api/health` | Public health probe |
+| GET | `/api/settings/profile` · `/system_config` · `/system` | Settings, health & notification readiness |
+| GET | `/api/health` | Public liveness probe (never blocks; safe for pingers) |
+| GET | `/api/health/deep` | Detailed status incl. live DB ping |
 
 All data routes require `Authorization: Bearer <JWT>`.
 
@@ -225,6 +229,66 @@ All data routes require `Authorization: Bearer <JWT>`.
 > `DOCS_ENABLED=true`, and security headers are set on every response.
 > If notifications show `chat not found`, open your bot in Telegram and
 > press **START** once.
+
+---
+
+## 🩺 Diagnostics — verify the alert chain
+
+If you are **not receiving Telegram alerts**, run the end-to-end check
+(from `backend/`):
+
+```powershell
+& ".venv\Scripts\python.exe" scripts\diagnose.py
+```
+
+It verifies, in order: config presence → bot token (`getMe`) → **actual
+`sendMessage` delivery** → lists every chat that recently messaged the bot
+(so you can find the real `TELEGRAM_CHAT_ID`) → MongoDB reachability →
+Gemini reachability. Exit code is non-zero if alerting is broken.
+
+Quick delivery test only:
+
+```powershell
+& ".venv\Scripts\python.exe" scripts\test_notify.py
+```
+
+**`chat not found`?** The bot cannot message you until you have opened it and
+pressed **START**. Send `/whoami` to your bot — it replies with your numeric
+chat id. Set `TELEGRAM_CHAT_ID` to that value (Render dashboard + `.env`). The
+backend also auto-captures your id on first contact as a safety net.
+
+---
+
+## 🛰️ Keeping the free Render instance awake (100% free)
+
+Render's free web service **spins down after ~15 min idle**; a sleeping
+process cannot wake itself. Two layers keep notifications flowing:
+
+1. **In-app keep-alive** (already on): `scheduler.py` self-pings
+   `/api/health` every `SELF_PING_INTERVAL_MINUTES` (default 10) while awake,
+   and a DB-health job reconnects Mongo if the pool goes stale.
+2. **External pinger** (set this up once — the reliable layer):
+   - [UptimeRobot](https://uptimerobot.com) (free, 5-min HTTP checks), **or**
+   - [cron-job.org](https://cron-job.org) (free, 1-min interval).
+   - Monitor URL: `https://placementos-api.onrender.com/api/health`
+   - Interval: **5 minutes** (keeps the instance warm around the clock).
+
+Related env vars (see `render.yaml`):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SELF_PING_ENABLED` | `true` | In-process keep-alive on/off |
+| `SELF_PING_INTERVAL_MINUTES` | `10` | How often to self-ping while awake |
+| `PUBLIC_BASE_URL` | `https://placementos-api.onrender.com` | URL the self-ping targets |
+
+> **Cold start is now safe:** `/api/health` never touches the database, and
+> all heavy init (DB, scheduler, Telegram) runs in a background task — so the
+> platform health check passes immediately and the first request no longer
+> hangs. Mongo calls use 8 s timeouts so a paused Atlas cluster can never
+> freeze the app.
+
+---
+
 
 ### ⚠️ Run exactly ONE backend instance
 
@@ -250,8 +314,11 @@ The frontend dev server expects the API on **port 8000**
 ### 🚀 Deploying (production checklist)
 
 1. **Backend**: host on a persistent VM/container (Render, Railway, Fly.io,
-   or a home server) — the Telethon userbot must stay running; serverless
-   platforms will kill the long-lived Telegram session.
+   or a home server) — the Telethon userbot must stay running. On Render's
+   **free** tier the service spins down when idle, so add a free external
+   uptime pinger (see “Keeping the free Render instance awake”). The backend
+   already self-pings and uses non-blocking startup + DB reconnect so cold
+   starts recover automatically without a manual restart.
 2. **Frontend**: `npm run build` then serve `dist/` from Vercel/Netlify/
    Nginx. Set `VITE_API_URL` to your backend URL **at build time**.
 3. **CORS**: set `CORS_ORIGINS='["https://your-frontend-domain"]'` in the
@@ -267,7 +334,7 @@ The frontend dev server expects the API on **port 8000**
 
 ## 💬 Telegram Bot Commands
 
-`/start /help /jobs /today /urgent /deadlines /applied /pending /expired /stats /search <company>` — plus inline **Mark Applied / Remind Later / Ignore** buttons on every alert.
+`/start /help /whoami /jobs /today /urgent /deadlines /applied /pending /expired /stats /search <company>` — plus inline **Mark Applied / Remind Later / Ignore** buttons on every alert. `/whoami` reports your chat id (fixes `chat not found`).
 
 ---
 

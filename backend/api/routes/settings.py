@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from database import app_settings_col
 from api.routes.auth import require_auth
+from config import settings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"],
                    dependencies=[Depends(require_auth)])
@@ -79,10 +80,23 @@ async def trigger_scan_history(req: ScanHistoryRequest):
 
 @router.get("/system")
 async def get_system_status():
-    """Get system health status."""
-    from services.watchdog import get_last_received, _userbot_running
+    """Get system health status including DB and notification readiness."""
+    from services.watchdog import get_last_received, _userbot_running, get_userbot_error
+    from database import is_db_ready
+    from database import ensure_connection
+
+    db_reachable = await ensure_connection()
     last = get_last_received()
+
+    # Is the configured chat id actually able to receive alerts?
+    notifications_ready = bool(settings.telegram_bot_token and settings.telegram_chat_id)
+
     return {
         "userbot_running": _userbot_running,
         "last_message_received": last.isoformat() if last else None,
+        "userbot_error": get_userbot_error(),
+        "db_ready": is_db_ready(),
+        "db_reachable": db_reachable,
+        "notifications_ready": notifications_ready,
+        "chat_id_configured": settings.telegram_chat_id or None,
     }

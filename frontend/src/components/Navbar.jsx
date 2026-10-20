@@ -22,7 +22,7 @@ export default function Navbar() {
     <nav className="sidebar">
       <div className="sidebar-brand">
         <h1 style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.05em' }}>Placement Assistant</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>AI Tracker System v2.0</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>Placement Monitor System v2.0</p>
       </div>
       
       <div className="sidebar-nav">

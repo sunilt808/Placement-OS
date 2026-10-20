@@ -95,6 +95,7 @@ logs/
 
 # Runtime source documents downloaded from placement messages
 backend/data/documents/
+backend/data/
 
 # Local scratch notes
 scratch/
@@ -103,3 +104,11 @@ todo.local.md
 # Runtime logs + deploy artifacts
 backend/logs/
 .vercel/
+
+# OCR / extraction scratch output
+*.ocr.txt
+*.extracted.txt
+
+# Render / Vercel local link files
+.render/
+.vercel/project.json

@@ -27,11 +27,24 @@ from services.excel_service import (
     process_spreadsheet,
     handle_shortlist_report,
 )
-from services.image_ocr import ocr_image_bytes
+from services.image_ocr import ocr_image_bytes_with_fallback
 
 IST = pytz.timezone("Asia/Kolkata")
 
 _client: TelegramClient | None = None
+
+
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif")
+IMAGE_MIMES = {
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "image/bmp", "image/tiff",
+}
+
+
+def is_image_document(filename: str, mime: str) -> bool:
+    """True when a Telegram *document* is actually an image (poster/screenshot)."""
+    fname = (filename or "").lower()
+    return fname.endswith(IMAGE_EXTS) or (mime or "") in IMAGE_MIMES
 
 
 def _doc_filename(message) -> str:
@@ -71,13 +84,30 @@ async def _route_media(client, message, caption: str = ""):
             except Exception as e:
                 print(f"[Userbot] Spreadsheet handling failed: {e}")
             return None, None
+        if is_image_document(filename, mime):
+            try:
+                data = await client.download_media(message, file=bytes)
+                if data:
+                    ocr_text = await ocr_image_bytes_with_fallback(data)
+                    if ocr_text:
+                        return ({
+                            "text": ocr_text,
+                            "filename": filename or "image_announcement.jpg",
+                            "mime_type": mime or "image/jpeg",
+                            "size_bytes": len(data),
+                            "storage_key": None,
+                            "text_extracted": True,
+                        }), None
+            except Exception as e:
+                print(f"[Userbot] Image document OCR failed: {e}")
+            return None, None
         return await download_and_extract_pdf(client, message), None
 
     if getattr(message.media, "photo", None):
         try:
             data = await client.download_media(message, file=bytes)
             if data:
-                ocr_text = await ocr_image_bytes(data)
+                ocr_text = await ocr_image_bytes_with_fallback(data)
                 if ocr_text:
                     return ({
                         "text": ocr_text,

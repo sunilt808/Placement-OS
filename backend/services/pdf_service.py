@@ -37,6 +37,13 @@ try:
 except ImportError:
     _HAS_DOCX = False
 
+# ── XLSX (read as plain text too, not only for shortlist scanning) ────────────
+try:
+    import openpyxl
+    _HAS_OPENPYXL = True
+except ImportError:
+    _HAS_OPENPYXL = False
+
 # ── HTML ──────────────────────────────────────────────────────────────────────
 try:
     from bs4 import BeautifulSoup
@@ -44,8 +51,25 @@ try:
 except ImportError:
     _HAS_BS4 = False
 
+# ── Offline OCR for images sent as files ──────────────────────────────────────
+try:
+    from services.image_ocr import _ocr_bytes as _ocr_bytes_sync
+except Exception:
+    def _ocr_bytes_sync(_data: bytes) -> str:  # pragma: no cover - optional dep
+        return ""
+
 MAX_TEXT_LENGTH = 15000  # generous limit for 3–18 page JDs
 DOCUMENTS_DIR = Path(__file__).resolve().parents[1] / "data" / "documents"
+
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif")
+IMAGE_MIMES = {
+    "image/jpeg", "image/jpg", "image/png", "image/webp",
+    "image/bmp", "image/tiff",
+}
+SPREADSHEET_EXTS = (".xlsx", ".xlsm", ".xls")
+TEXT_EXTS = (".txt", ".md", ".csv")
+HTML_EXTS = (".html", ".htm")
+DOCX_EXTS = (".docx", ".doc")
 
 
 def _store_document(file_bytes: bytes, filename: str) -> str:
@@ -157,6 +181,59 @@ def _extract_html(html_bytes: bytes) -> str:
         return html_bytes.decode("utf-8", errors="ignore")
 
 
+def _extract_spreadsheet_text(sheet_bytes: bytes) -> str:
+    """
+    Flatten a workbook into plain text so a JD sent as .xlsx is still readable.
+
+    Each row becomes "col1 | col2 | col3" and sheets are labelled. This is
+    additive to the shortlist scanner, which uses its own row parser.
+    """
+    if not _HAS_OPENPYXL:
+        return ""
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(sheet_bytes), read_only=True,
+                                    data_only=True)
+    except Exception as e:
+        print(f"[PDF] XLSX text extraction failed: {e}")
+        return ""
+    lines: list[str] = []
+    try:
+        for ws in wb.worksheets:
+            lines.append(f"# Sheet: {ws.title}")
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
+                if cells:
+                    lines.append(" | ".join(cells))
+    except Exception as e:
+        print(f"[PDF] XLSX row iteration failed: {e}")
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+    return "\n".join(lines).strip()
+
+
+def _extract_legacy_doc(doc_bytes: bytes) -> str:
+    """
+    Best-effort text from a legacy binary .doc by pulling printable runs.
+
+    python-docx cannot read binary .doc; we salvage readable ASCII/UTF-16
+    text rather than failing outright.
+    """
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            raw = doc_bytes.decode(encoding, errors="ignore")
+            cleaned = re.sub(r"[^\x20-\x7E\n\r\t]+", " ", raw)
+            chunks = [c.strip() for c in re.split(r"\s{2,}", cleaned) if len(c.strip()) > 3]
+            text = " ".join(chunks).strip()
+            if len(text) > 30:
+                return text
+        except Exception:
+            continue
+    return ""
+
+
 async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
     """
     Downloads a document from a Telegram message and extracts text locally.
@@ -179,15 +256,22 @@ async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
     filename = _get_filename_from_message(message) or "attachment"
 
     # Determine supported types
-    is_pdf = mime_type == "application/pdf" or filename.lower().endswith(".pdf")
+    fname_lower = filename.lower()
+    is_pdf = mime_type == "application/pdf" or fname_lower.endswith(".pdf")
     is_docx = mime_type in (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword",
-    ) or filename.lower().endswith((".docx", ".doc"))
-    is_html = mime_type in ("text/html",) or filename.lower().endswith((".html", ".htm"))
-    is_txt = mime_type in ("text/plain",) or filename.lower().endswith(".txt")
+    ) or fname_lower.endswith(DOCX_EXTS)
+    is_legacy_doc = fname_lower.endswith(".doc") and not fname_lower.endswith(".docx")
+    is_html = mime_type in ("text/html",) or fname_lower.endswith(HTML_EXTS)
+    is_txt = mime_type in ("text/plain", "text/markdown") or fname_lower.endswith(TEXT_EXTS)
+    is_sheet = mime_type in (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+    ) or fname_lower.endswith(SPREADSHEET_EXTS)
+    is_image = mime_type in IMAGE_MIMES or fname_lower.endswith(IMAGE_EXTS)
 
-    if not (is_pdf or is_docx or is_html or is_txt):
+    if not (is_pdf or is_docx or is_html or is_txt or is_sheet or is_image):
         print(f"[PDF] Unsupported mime type: {mime_type} ({filename})")
         return None
 
@@ -208,8 +292,14 @@ async def download_and_extract_pdf(client, message) -> Optional[Dict[str, Any]]:
     def _extract_sync():
         if is_pdf:
             return _extract_pdf(file_bytes)
+        elif is_image:
+            return _ocr_bytes_sync(file_bytes)
+        elif is_legacy_doc:
+            return _extract_legacy_doc(file_bytes)
         elif is_docx:
             return _extract_docx(file_bytes)
+        elif is_sheet:
+            return _extract_spreadsheet_text(file_bytes)
         elif is_html:
             return _extract_html(file_bytes)
         elif is_txt:

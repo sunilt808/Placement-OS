@@ -38,18 +38,69 @@ from services.opportunity_engine import detect_missed_opportunities
 IST = pytz.timezone("Asia/Kolkata")
 AUTHORIZED_CHAT_ID = int(settings.telegram_chat_id) if settings.telegram_chat_id.isdigit() else None
 
+# A chat that messages the bot while unconfigured is almost certainly the owner.
+# We remember it in-memory so self-discovery works even before .env is fixed.
+_discovered_chat_id: int | None = None
+
+
+def _authorized_ids() -> set[int]:
+    ids = set()
+    if AUTHORIZED_CHAT_ID is not None:
+        ids.add(AUTHORIZED_CHAT_ID)
+    if _discovered_chat_id is not None:
+        ids.add(_discovered_chat_id)
+    return ids
+
 
 def _auth_check(update: Update) -> bool:
-    return AUTHORIZED_CHAT_ID is not None and update.effective_chat.id == AUTHORIZED_CHAT_ID
+    return update.effective_chat.id in _authorized_ids()
+
+
+async def _register_chat_if_unknown(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
+    """If the configured chat id is wrong, capture the real one on first contact.
+
+    Returns True when a (re)discovery happened so the caller can confirm.
+    """
+    global _discovered_chat_id
+    chat_id = update.effective_chat.id
+    if AUTHORIZED_CHAT_ID is None or chat_id != AUTHORIZED_CHAT_ID:
+        if _discovered_chat_id != chat_id:
+            _discovered_chat_id = chat_id
+            print(f"[Bot] Discovered real chat id: {chat_id} "
+                  f"(configured: {settings.telegram_chat_id}). "
+                  f"Set TELEGRAM_CHAT_ID={chat_id} in .env / Render to persist.")
+            try:
+                from database import app_settings_col
+                await app_settings_col().update_one(
+                    {"_id": "telegram_chat_id"},
+                    {"$set": {"chat_id": chat_id}},
+                    upsert=True,
+                )
+            except Exception as e:
+                print(f"[Bot] Could not persist discovered chat id: {e}")
+            return True
+    return False
+
+
+def get_effective_chat_id() -> int | None:
+    """Best-known destination chat id (configured, else discovered)."""
+    return AUTHORIZED_CHAT_ID or _discovered_chat_id
 
 
 # ── Command Handlers ──────────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _auth_check(update):
-        return
+    discovered = await _register_chat_if_unknown(update, ctx)
+    note = ""
+    if discovered:
+        note = (
+            f"\n\n⚙️ <b>Setup note:</b> your chat id is "
+            f"<code>{update.effective_chat.id}</code>.\n"
+            f"Set <code>TELEGRAM_CHAT_ID={update.effective_chat.id}</code> in your "
+            f"env / Render dashboard so alerts reach you even before you message me."
+        )
     await update.message.reply_text(
-        "👋 <b>AI Placement Monitor</b>\n\n"
+        "👋 <b>Placement Monitor</b>\n\n"
         "I'm watching your placements. Forward any placement message here.\n\n"
         "Commands:\n"
         "/jobs — All active opportunities\n"
@@ -59,8 +110,24 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/applied — Applied opportunities\n"
         "/pending — Not yet applied\n"
         "/stats — Statistics\n"
-        "/search <company> — Search by company",
+        "/whoami — Show your chat id\n"
+        "/search <company> — Search by company"
+        + note,
         parse_mode="HTML"
+    )
+
+
+async def cmd_whoami(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Always replies — lets the owner discover the correct TELEGRAM_CHAT_ID."""
+    chat_id = update.effective_chat.id
+    configured = settings.telegram_chat_id or "(not set)"
+    match = "✅ matches configured id" if str(chat_id) == configured else \
+            "⚠️ does NOT match configured id — update TELEGRAM_CHAT_ID"
+    await update.message.reply_text(
+        f"🆔 <b>Your chat id:</b> <code>{chat_id}</code>\n"
+        f"⚙️ <b>Configured:</b> <code>{configured}</code>\n"
+        f"{match}",
+        parse_mode="HTML",
     )
 
 
@@ -294,25 +361,38 @@ async def handle_forwarded_document(update: Update, ctx: ContextTypes.DEFAULT_TY
     tg_file = await ctx.bot.get_file(doc.file_id)
     data = bytes(await tg_file.download_as_bytearray())
     from services.pdf_service import (
-        _extract_pdf, _extract_docx, _extract_html, _store_document, MAX_TEXT_LENGTH,
+        _extract_pdf, _extract_docx, _extract_html, _extract_spreadsheet_text,
+        _extract_legacy_doc, _store_document, MAX_TEXT_LENGTH,
+        IMAGE_EXTS, IMAGE_MIMES, SPREADSHEET_EXTS, TEXT_EXTS, HTML_EXTS, DOCX_EXTS,
     )
-    lower = filename.lower()
-    def _extract_sync():
-        if lower.endswith(".pdf") or (doc.mime_type == "application/pdf"):
-            return _extract_pdf(data)
-        if lower.endswith((".docx", ".doc")):
-            return _extract_docx(data)
-        if lower.endswith((".html", ".htm")):
-            return _extract_html(data)
-        if lower.endswith(".txt"):
-            return data.decode("utf-8", errors="ignore").strip()
-        return ""
+    from services.image_ocr import ocr_image_bytes_with_fallback
     import asyncio as _asyncio
-    extracted = ""
-    try:
-        extracted = await _asyncio.to_thread(_extract_sync)
-    except Exception:
-        pass
+    lower = filename.lower()
+    mime = doc.mime_type or ""
+    is_image = mime in IMAGE_MIMES or lower.endswith(IMAGE_EXTS)
+
+    if is_image:
+        extracted = await ocr_image_bytes_with_fallback(data) or ""
+    else:
+        def _extract_sync():
+            if lower.endswith(".pdf") or mime == "application/pdf":
+                return _extract_pdf(data)
+            if lower.endswith(".doc") and not lower.endswith(".docx"):
+                return _extract_legacy_doc(data)
+            if lower.endswith(DOCX_EXTS):
+                return _extract_docx(data)
+            if lower.endswith(SPREADSHEET_EXTS):
+                return _extract_spreadsheet_text(data)
+            if lower.endswith(HTML_EXTS):
+                return _extract_html(data)
+            if lower.endswith(TEXT_EXTS):
+                return data.decode("utf-8", errors="ignore").strip()
+            return ""
+        extracted = ""
+        try:
+            extracted = await _asyncio.to_thread(_extract_sync)
+        except Exception:
+            pass
     storage_key = await _asyncio.to_thread(_store_document, data, filename)
 
     full_text = f"{caption}\n\n--- DOCUMENT CONTENT ---\n{extracted}".strip()
@@ -349,7 +429,7 @@ async def handle_forwarded_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     """Forwarded photos (posters/screenshots) -> offline OCR -> pipeline."""
     if not _auth_check(update):
         return
-    from services.image_ocr import ocr_image_bytes
+    from services.image_ocr import ocr_image_bytes_with_fallback
 
     caption = update.message.caption or ""
     photo = update.message.photo[-1]  # highest resolution
@@ -357,7 +437,7 @@ async def handle_forwarded_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     data = bytes(await tg_file.download_as_bytearray())
 
     await update.message.reply_text("🖼️ Reading image text locally (OCR)...")
-    ocr_text = await ocr_image_bytes(data) or ""
+    ocr_text = await ocr_image_bytes_with_fallback(data) or ""
 
     full_text = f"{caption}\n\n--- IMAGE TEXT ---\n{ocr_text}".strip()
     if not full_text.strip():
@@ -452,6 +532,7 @@ def build_bot_app() -> Application:
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_start))
+    app.add_handler(CommandHandler("whoami", cmd_whoami))
     app.add_handler(CommandHandler("jobs", cmd_jobs))
     app.add_handler(CommandHandler("today", cmd_today))
     app.add_handler(CommandHandler("urgent", cmd_urgent))

@@ -49,6 +49,24 @@ def _normalize_usn(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(value).upper())
 
 
+def _usn_match_keys(value: str) -> List[str]:
+    """
+    Return the canonical USN plus tolerant variants.
+
+    Sheets sometimes drop the leading college digit ("DS24CS421" vs
+    "1DS24CS421"), so we match on the trailing distinctive part too.
+    """
+    norm = _normalize_usn(value)
+    keys = {norm} if norm else set()
+    # Variant with a leading digit stripped (1DS24CS421 -> DS24CS421)
+    if len(norm) > 3 and norm[0].isdigit():
+        keys.add(norm[1:])
+    # Variant with an extra leading digit added (DS24CS421 -> 1DS24CS421)
+    if norm and not norm[0].isdigit() and len(norm) >= 8:
+        keys.add("1" + norm)
+    return [k for k in keys if len(k) >= 8]
+
+
 def _name_variants(full_name: str) -> List[str]:
     """
     "Sunil T" -> ["sunil t", "sunil", "t sunil", "sunil t.", "t. sunil"]
@@ -74,6 +92,7 @@ def find_student_hit(rows: List[List[Any]]) -> Optional[Dict[str, Any]]:
     USN wins over name; earliest row wins within same priority.
     """
     usn_target = _normalize_usn(settings.student_usn)
+    usn_keys = _usn_match_keys(settings.student_usn)
     name_variants = _name_variants(settings.student_name)
 
     name_fallback = None
@@ -87,8 +106,8 @@ def find_student_hit(rows: List[List[Any]]) -> Optional[Dict[str, Any]]:
                 continue
 
             # ── Priority 1: USN exact containment ────────────────────────────
-            if usn_target and len(norm := _normalize_usn(text)) <= 40:
-                if usn_target in norm:
+            if usn_keys and len(norm := _normalize_usn(text)) <= 40:
+                if any(key in norm for key in usn_keys):
                     return {
                         "matched_field": "USN",
                         "matched_value": settings.student_usn,

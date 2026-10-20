@@ -128,6 +128,33 @@ async def _run_storage_check():
         print(f"[Scheduler] Storage check error: {e}")
 
 
+async def _run_self_ping():
+    """Hit our own public /api/health to keep Render's free instance warm.
+
+    While the service is awake this resets the idle timer so it is not spun
+    down mid-day. (A fully asleep instance needs an external pinger.)
+    """
+    if not settings.self_ping_enabled or not settings.public_base_url:
+        return
+    url = settings.public_base_url.rstrip("/") + "/api/health"
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=10)
+            print(f"[SelfPing] {resp.status_code} {url}")
+    except Exception as e:
+        print(f"[SelfPing] failed: {e}")
+
+
+async def _run_db_health():
+    """Ensure the Mongo client stays connected; reconnect if it went stale."""
+    from database import ensure_connection
+    try:
+        await ensure_connection()
+    except Exception as e:
+        print(f"[Scheduler] DB health error: {e}")
+
+
 def start_scheduler():
     """Initialize and start the APScheduler."""
     global _scheduler
@@ -188,6 +215,20 @@ def start_scheduler():
         _run_storage_check,
         trigger=IntervalTrigger(hours=6),
         id="storage_check",
+        replace_existing=True,
+    )
+
+    # Self-ping keep-alive + DB health (keeps free instance warm & connected)
+    _scheduler.add_job(
+        _run_self_ping,
+        trigger=IntervalTrigger(minutes=settings.self_ping_interval_minutes),
+        id="self_ping",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        _run_db_health,
+        trigger=IntervalTrigger(minutes=5),
+        id="db_health",
         replace_existing=True,
     )
 

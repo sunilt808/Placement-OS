@@ -30,8 +30,14 @@ export default function Settings() {
     getSystemConfig().then(c => {
       if (c) setSystemConfig(c);
     });
-    getSystemStatus().then(setStatus);
+    loadStatus();
+    const timer = setInterval(loadStatus, 30000);
+    return () => clearInterval(timer);
   }, []);
+
+  const loadStatus = () => {
+    getSystemStatus().then(setStatus).catch(() => {});
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -61,7 +67,10 @@ export default function Settings() {
       </div>
 
       <div className="card" style={{ marginBottom: 32 }}>
-        <h3 style={{ marginBottom: 20 }}>System Status</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0 }}>System Status</h3>
+          <button className="btn" onClick={loadStatus} style={{ fontSize: '0.8rem' }}>Refresh</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
             <div className="text-muted" style={{ fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: 4 }}>Live Listener (Userbot)</div>
@@ -73,12 +82,42 @@ export default function Settings() {
           <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
             <div className="text-muted" style={{ fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: 4 }}>Last Heartbeat</div>
             <div style={{ fontWeight: 600 }}>
-              {status?.last_message_received 
-                ? new Date(status.last_message_received).toLocaleString() 
+              {status?.last_message_received
+                ? new Date(status.last_message_received).toLocaleString()
                 : 'No messages received yet'}
             </div>
           </div>
+          <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+            <div className="text-muted" style={{ fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: 4 }}>Database</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+              <div className={`status-dot ${status?.db_reachable ? 'online' : 'offline'}`} />
+              {status?.db_reachable ? 'Connected' : 'Unreachable'}
+            </div>
+          </div>
+          <div style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+            <div className="text-muted" style={{ fontSize: '0.8rem', textTransform: 'uppercase', marginBottom: 4 }}>Notifications</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+              <div className={`status-dot ${status?.notifications_ready ? 'online' : 'offline'}`} />
+              {status?.notifications_ready ? 'Ready' : 'Not configured'}
+            </div>
+          </div>
         </div>
+
+        {status && !status.notifications_ready && (
+          <div style={{ marginTop: 16, padding: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem' }}>
+            ⚠️ Telegram alerts are not set up. Open your bot in Telegram, press <b>START</b>, then set <code>TELEGRAM_CHAT_ID</code> in the backend environment.
+          </div>
+        )}
+        {status && status.notifications_ready && status.userbot_running && !status.last_message_received && (
+          <div style={{ marginTop: 16, padding: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem' }}>
+            ⚠️ Listener is running but no messages received yet — the placement group may be quiet.
+          </div>
+        )}
+        {status?.userbot_error && (
+          <div style={{ marginTop: 16, padding: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem' }}>
+            ❌ Listener error: {status.userbot_error}
+          </div>
+        )}
 
         <div style={{ marginTop: 24, padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 6 }}>

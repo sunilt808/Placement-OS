@@ -73,6 +73,80 @@ KNOWN_COMPANIES = {
     "flipkart", "myntra", "nykaa", "bigbasket", "dunzo",
     "altimetrik", "sigmoid", "quantiphi", "mu sigma", "fractal analytics",
     "axtria", "analytixlabs", "latentview", "datamatics",
+    # ── Recruiter list observed in placement records (2026) ──────────────────
+    "acmegrade", "commonwealth bank of australia", "bl kashyap",
+    "nous infosystems", "edgeverve", "edgeverve systems", "ascent circuits",
+    "ashok leyland", "sattva group", "maximus", "skillflow", "averixis",
+    "averixis solutions", "xentric integrated", "brillio", "johnson controls",
+    "questglobal", "quest global", "the mathco", "zetwerk", "axa global",
+    "ibm cio diversity", "jsw", "jsw group", "learnflu", "mercedes-benz",
+    "oracle ofss", "consilio", "dn solutions", "internselite",
+    "mirafra technologies", "netcracker", "pinelabs", "quality austria",
+    "skillo villa", "sopra steria", "studio amaavi", "texas instruments",
+    "unlox academy", "adarsh developers", "aisin automotive", "corizo",
+    "elythra edufyi", "enphase energy", "onuswork software",
+    "siemens healthineers", "7pi innovations", "adyapan", "akkodis",
+    "allstate", "allstate india", "anz", "deleteme",
+    "eurofins", "eurofins it solutions", "greenway health", "high-technext",
+    "icici bank", "lkq", "nasdaq", "navikenz", "piramal finance", "plivo",
+    "tasteofmom", "unlox", "at&t", "ballestra group", "dover india",
+    "dsr group", "grasim industries", "indegene", "internzvalley", "moglix",
+    "new relic", "open fx", "san engineering", "smarted", "squareyards",
+    "thomson reuters", "titan", "unisys", "abs general", "arvind smart",
+    "avgova solutions", "bunny studcon", "capstone life", "cdm smith",
+    "checkpoint", "clarivate", "coreel technologies", "dhurin", "edu-versity",
+    "elytespark innovations", "emplay", "giant eagle", "hashedin",
+    "hashedin technologies", "havells", "havells india", "instawork",
+    "insys digital", "invntree ip service", "koch", "mindenious",
+    "o9 solutions", "pegasystems", "perfios", "perfios india",
+    "quantiphi analytics", "relyntis", "rinex technology", "rubrik",
+    "sandisk", "sixt research", "zepto", "a.p.moller", "maersk",
+    "arys garage", "biocon", "booking holdings", "bpl medical",
+    "broadridge", "cgi", "cloudsek", "codefrontier", "codehood",
+    "deloitte india", "denso kirloskar", "elanco", "federal bank",
+    "harman international", "jyesta corporate", "kantar", "lee spring",
+    "lenovo", "microland", "mitsubishi power", "onepaper research",
+    "phinia delphi", "pmc hydraulics", "schneider electric",
+    "scientific research", "sheng huei technology", "sisa", "skillentrix",
+    "stanza living", "tata advanced", "taylor & francis", "think41",
+    "toyotetsu", "travel lykke", "trianz", "vfm systems", "vodafone",
+    "whatfix", "yokogawa", "zapcom", "alpha innovation", "apex auto",
+    "aquera india", "arnifi india", "bambinos.live", "bharti airtel",
+    "champion groups", "coffee day", "cognite", "essilor luxottica",
+    "finsynth", "garage plug", "gps renewables", "gravityworks technology",
+    "house construct", "ikea", "imeg", "intellipaat", "iqol technologies",
+    "jll technologies", "jlr", "leadsquared", "lumen technologies",
+    "m2nxt solutions", "mukand sumi", "netgear", "park controls", "paychex",
+    "pelatro", "penacea medical", "publicis sapient", "ritikaawood",
+    "sap star program", "sasmos het", "sbm offshore", "seedicon",
+    "seg automotive", "sipal technologies", "st telemedia", "stellantis",
+    "superagi", "talview", "techne avinya", "technglobal",
+    "triveni turbines", "ttk prestige", "vois", "voya india",
+    "wabtec corporation", "yuvi pep", "zanskar", "acufore", "adtran",
+    "akamai", "alten", "amagi", "amagi labs", "ansr", "apollo tyres",
+    "appsforbharat", "aptean", "assa abloy", "ather energy", "atkinsrealis",
+    "atlas copco", "automation anywhere", "autoverse mobility",
+    "aviohelitronics", "baker tilly", "bharati robotic", "black olive",
+    "bosch automotive", "bounteous", "accolite", "brainbox consulting",
+    "brickstohome", "city union bank", "cloudthat", "csg", "deepwoods",
+    "dell technologies", "digiotech solutions", "divum", "edelman",
+    "fab realty", "festo", "fwc it", "ggs information", "glenmore realty",
+    "glowlogics", "hackwithinfy", "hakwithinfy", "hokuto corporation", "hpe",
+    "hyper verge", "ibeforum", "infosys higher package", "infrrd",
+    "inkers technology", "intelligent science", "itc", "john crane",
+    "jumbotail", "kickdrum", "kpn farm fresh", "labcorp", "leucine",
+    "mahindra", "mahindra and mahindra", "matsushima measure tech", "meil",
+    "minezawa", "morphle lab", "mysa", "nauvta energy", "netm corp",
+    "new space research", "npst", "nxtq", "opentext", "opmobility",
+    "prodoc.ai", "promac engineering", "rdc concrete", "relanto.ai",
+    "renew", "sage", "sealtite", "semperonic labs", "serent", "sharpshell.ai",
+    "sika interplant", "skill vedanth", "skillorbit", "sobha", "spikestudio",
+    "springfive", "srico", "stella homes", "symphonyai",
+    "tantragyaan solutions", "tata technologies", "texas ai", "textron",
+    "tiea connectors", "tomoe shokai", "toyo modec ofs", "unilever",
+    "vedupskilling", "virchow biotech", "visteon corporation", "vk building",
+    "western digital", "winman software", "wipfli india", "yuken india",
+    "zeta", "zscaler", "zynga",
 }
 
 # Known false positives -- words that look like companies but aren't
@@ -93,7 +167,7 @@ COMPANY_BLACKLIST = {
     "google", "google form", "google forms",  # unless it's google hiring
     "form", "link", "register", "apply", "application",
     "complete", "completed", "aerospace",  # too generic
-    "it solutions", "technologies", "services",  # suffix only, not full name
+    "it solutions",  # suffix only, not full name
     "& complete", "and complete",
     "non-cse", "robotics engineering",
     "associate trainee", "graduate trainee",  # these are roles, not companies
@@ -105,6 +179,20 @@ COMPANY_BLACKLIST = {
     "best regards", "kind regards", "warm regards", "many thanks",
     "thank you", "thanks", "regards", "dear students", "dear all",
     "subject", "re-registration", "registration required",
+    # Message fragments that slipped through as company names
+    "arts", "a member", "member", "who we are", "report to",
+    "headphones", "headphones/earphones", "earphones",
+    "es participating", "pdf content", "pdf content --- infosys",
+    "currently", "position", "& data", "and data",
+    "any job below 10lpa package", "most urgent & high priority",
+    "sted not to call or message", "please note",
+    # More fragments observed in production data
+    "office reporting timing", "reporting timing", "confirmation",
+    "confirmation immediately", "confirmation immediately dsi",
+    "id &", "id", "pre", "team dsi",
+    "currently ril may be", "unknown", "unknown company",
+    "norms", "overview", "about the role",
+    "placement cell update", "eurofins", "the eurofins",
 }
 
 COMPANY_NOISE_WORDS = {
@@ -117,7 +205,7 @@ COMPANY_NOISE_WORDS = {
 COMPANY_INTRO_PATTERNS = [
     r"(?:company|firm|organization|organisation)\s*[:\-]\s*([A-Z][A-Za-z0-9\s&.,'-]{1,35})",
     r"([A-Z][A-Za-z0-9\s&.,'-]{2,30})\s+(?:is\s+)?(?:hiring|recruiting|offering|looking|inviting|seeking)",
-    r"(?:hiring|placement|drive|recruitment)\s+(?:at|by|with|for|from)\s+([A-Z][A-Za-z0-9\s&.,'-]{2,30})",
+    r"(?:hiring|recruiting|recruitment|placement|drive)\s+(?:at|by|with|from)\s+([A-Z][A-Za-z0-9\s&.,'-]{2,30})",
     r"([A-Z][A-Za-z0-9\s&.,'-]{2,30})\s+(?:campus\s+)?(?:placement|drive|recruitment|hiring\s+drive)",
     r"(?:joining|joining\s+us|partner)\s+at\s+([A-Z][A-Za-z0-9\s&.,'-]{2,30})",
     r"job\s+at\s+([A-Z][A-Za-z0-9\s&.,'-]{2,30})",
@@ -135,7 +223,39 @@ def _is_valid_company_name(name: str) -> bool:
     if not name or len(name) < 2:
         return False
     name_lower = name.lower().strip()
-    
+
+    # Reject multi-line strings — a real company name is a single line.
+    # Multi-line usually means a message/fragment got captured wholesale.
+    if "\n" in name or "\r" in name:
+        return False
+
+    # Reject separator junk like "PDF CONTENT --- INFOSYS" or "A === B"
+    if re.search(r"[-=_*]{2,}", name):
+        return False
+
+    # Reject truncated fragments with an unclosed bracket ("Havells (Software")
+    # or a dangling opening paren at the end.
+    if name.count("(") != name.count(")") or name.rstrip().endswith("("):
+        return False
+
+    # Reject ALL-CAPS multi-word HEADINGS ("ES PARTICIPATING", "PDF CONTENT",
+    # "MOST URGENT & HIGH PRIORITY"). A genuinely uppercase company name
+    # (HITACHI, DAI-ICHI DENTSU LTD) is fine, so we only reject when a
+    # heading/fragment marker word is present.
+    HEADING_WORDS = {
+        "participating", "content", "urgent", "priority", "most", "notice",
+        "important", "instructions", "guidelines", "reporting", "timing",
+        "update", "updates", "list", "short", "shortlist", "registered",
+        "registration", "eligibility", "criteria", "procedure", "process",
+        "details", "overview", "summary", "abstract", "index", "table",
+    }
+    words = name.split()
+    alpha_words = [w for w in words if any(c.isalpha() for c in w)]
+    if (len(alpha_words) >= 2
+            and all(w.isupper() for w in alpha_words if any(c.isalpha() for c in w))
+            and any(w.lower().strip(".,:-") in HEADING_WORDS for w in words)):
+        return False
+
     # Reject if it has NO capitals at all (sentence fragments like
     # "thanks & regards"). Camel-case brands (eInfochips, iPhone-like
     # naming, zohoCorp) are legitimate companies and must pass.
@@ -162,13 +282,40 @@ def _is_valid_company_name(name: str) -> bool:
     if any(name_lower.startswith(v + " ") for v in verb_starts):
         return False
 
+    # Reject pronoun / generic-phrase leads ("We are", "They have", "It is")
+    PRONOUN_WORDS = {"we", "they", "it", "he", "she", "you", "i",
+                     "this", "that", "these", "those", "there", "here",
+                     "join", "us", "our"}
+    lead = name_lower.split()[0] if name_lower.split() else ""
+    if lead in PRONOUN_WORDS:
+        return False
+
     words = re.findall(r"[a-z0-9]+", name_lower)
     if not words or all(word in COMPANY_NOISE_WORDS for word in words):
         return False
     if any(word in {"hiring", "recruiting", "offering", "inviting", "seeking"}
            for word in words):
         return False
-    
+
+    # Reject names that are ONLY a legal suffix ("LTD", "Pvt Ltd", "Inc")
+    # — a real company name has a distinctive token before the suffix.
+    LEGAL_SUFFIXES = {
+        "ltd", "limited", "pvt", "private", "inc", "incorporated",
+        "corp", "corporation", "llp", "llc", "co", "company",
+    }
+    if all(word in LEGAL_SUFFIXES for word in words):
+        return False
+
+    # Reject names that are ONLY a generic corporate suffix
+    # ("Technologies", "Solutions"). A real name has a distinctive token
+    # before it ("XYZ Technologies", "Mirafra Technologies" are valid).
+    GENERIC_SUFFIXES = {
+        "technologies", "technology", "solutions", "solution",
+        "services", "systems", "software", "consulting", "industries",
+    }
+    if all(word in GENERIC_SUFFIXES for word in words):
+        return False
+
     return True
 
 
@@ -278,6 +425,31 @@ def extract_company_nlp(text: str) -> Optional[str]:
     return None
 
 
+def _is_valid_role(role: str) -> bool:
+    """Reject obvious message fragments from being treated as a role."""
+    if not role:
+        return False
+    r = role.strip()
+    if not (2 <= len(r) <= 60):
+        return False
+    if "\n" in r or "\r" in r:
+        return False
+    if re.search(r"[-=_*]{2,}", r):
+        return False
+    r_lower = r.lower()
+    ROLE_BLACKLIST = {
+        "various roles", "various", "roles", "role", "position", "profile",
+        "who we are", "the role", "this role", "details", "description",
+        "please", "note", "important", "and", "or", "the", "a", "an",
+    }
+    if r_lower in ROLE_BLACKLIST:
+        return False
+    # Must contain at least one alphabetic word of length >= 3
+    if not any(len(w) >= 3 and w.isalpha() for w in re.findall(r"[A-Za-z]+", r)):
+        return False
+    return True
+
+
 def extract_role_nlp(text: str) -> Optional[str]:
     """
     Enhanced role extractor with broader pattern matching.
@@ -292,7 +464,7 @@ def extract_role_nlp(text: str) -> Optional[str]:
         m = re.search(p, text, re.IGNORECASE | re.MULTILINE)
         if m:
             role = m.group(1).strip().rstrip('.,;')
-            if 2 <= len(role) <= 60:
+            if _is_valid_role(role):
                 return role
     
     # Pattern 2: Scan for known role keywords
@@ -528,6 +700,15 @@ CSE_ROLE_KEYWORDS = {
     "graduate engineer trainee", "get", "analyst", "consultant",
     "application developer", "web developer", "app developer",
     "technical program", "software intern", "engineering intern",
+    # Software / IT synonyms the user wants counted as CSE
+    "software", "software trainee", "software testing", "software support",
+    "software analyst", "software consultant", "programmer", "coder",
+    "it engineer", "it support", "it services", "it consultant",
+    "information technology", "computer science", "computer engineer",
+    "developer", "engineer trainee", "technology", "technical",
+    "programmer analyst", "system engineer", "network engineer",
+    "database", "database administrator", "dba", "cyber", "cybersecurity",
+    "web", "application", "cloud", "devops",
 }
 
 NON_CSE_ROLE_KEYWORDS = {
@@ -595,17 +776,60 @@ def compute_local_relevance(text: str) -> float:
 
 
 def extract_branches_nlp(text: str) -> Optional[List[str]]:
-    """Extract eligible engineering branches."""
+    """Extract eligible engineering branches.
+
+    Full branch names and CSE synonyms are matched case-insensitively
+    (e.g. "computer science", "software", "information technology").
+    Short tokens that are ambiguous in lowercase prose ("IT", "AI", "CS")
+    are matched CASE-SENSITIVELY so the word "it" in a sentence can't
+    falsely register as Information Technology.
+    """
     branches = []
     text_upper = text.upper()
-    known = [
-        "CSE", "ISE", "ECE", "EEE", "IT", "MECH", "CIVIL",
-        "AIDS", "AIML", "MCA", "BCA", "ROBOTICS",
-        "CHEMICAL", "BIOTECH", "AUTOMOBILE", "AERONAUTICAL",
-    ]
-    for b in known:
-        if re.search(rf'\b{b}\b', text_upper):
-            branches.append(b)
+
+    # ── Case-insensitive full-name / synonym matches → normalise to CSE ──────
+    # These are unambiguous multi-char phrases; safe to match any case.
+    # Both short and full forms are accepted (user request).
+    cse_synonyms = {
+        # Computer Science family
+        r"\bcomputer\s+science\s+(?:and|&)\s+engineering\b": "CSE",
+        r"\bcomputer\s+science\s+(?:and|&)\s+engg\b": "CSE",
+        r"\bcomputer\s+science\s*&\s*engineering\b": "CSE",
+        r"\bcomputer\s+science\s+(?:and|&)\s+information\s+technology\b": "CSE",
+        r"\bcomputer\s+science\b": "CSE",
+        r"\bcomp\.?\s*sci\.?\b": "CSE",
+        r"\bcomputer\s+engineering\b": "CSE",
+        r"\bc\.?\s*s\.?\s*e\.?\b": "CSE",
+        r"\bcse\b": "CSE",
+        # Information Technology family
+        r"\binformation\s+technology\b": "IT",
+        r"\binfo\s*tech\b": "IT",
+        r"\binformation\s+science\b": "ISE",
+        # Software family (treat as CSE)
+        r"\bsoftware\s+engineering\b": "CSE",
+        r"\bsoftware\s+technology\b": "CSE",
+        r"\bcomputer\s+applications?\b": "MCA",
+        r"\bsoftware\b": "CSE",
+    }
+    for pattern, norm in cse_synonyms.items():
+        if re.search(pattern, text, re.IGNORECASE):
+            if norm not in branches:
+                branches.append(norm)
+
+    # ── Case-sensitive short tokens (avoid "it"/"ai"/"cs" in prose) ─────────
+    short_case_sensitive = {
+        "CSE": "CSE", "ISE": "ISE", "ECE": "ECE", "EEE": "EEE",
+        "IT": "IT", "MECH": "MECH", "CIVIL": "CIVIL",
+        "AIDS": "AIDS", "AIML": "AIML", "MCA": "MCA", "BCA": "BCA",
+        "ROBOTICS": "ROBOTICS", "CHEMICAL": "CHEMICAL", "BIOTECH": "BIOTECH",
+        "AUTOMOBILE": "AUTOMOBILE", "AERONAUTICAL": "AERONAUTICAL",
+        "CS": "CS", "AI": "AI",
+    }
+    for token, norm in short_case_sensitive.items():
+        if re.search(rf"\b{re.escape(token)}\b", text):
+            if norm not in branches:
+                branches.append(norm)
+
     if "ALL BRANCHES" in text_upper or "ALL ENGINEERING" in text_upper:
         return ["ALL"]
     return branches if branches else None

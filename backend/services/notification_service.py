@@ -31,6 +31,17 @@ async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mo
         # must never fail merely because Telegram has not been configured.
         return None
 
+    chat_id = settings.telegram_chat_id
+    # If the configured id is wrong, fall back to a discovered chat id so alerts
+    # still reach the owner after they message the bot once.
+    try:
+        from telegram_bot import get_effective_chat_id
+        effective = get_effective_chat_id()
+        if effective is not None:
+            chat_id = str(effective)
+    except Exception:
+        pass
+
     async def _post(payload: dict):
         async with httpx.AsyncClient() as client:
             resp = await client.post(f"{TELEGRAM_API}/sendMessage", json=payload, timeout=10)
@@ -38,7 +49,7 @@ async def _send_message(text: str, reply_markup: Optional[dict] = None, parse_mo
             return resp.json()
 
     payload = {
-        "chat_id": settings.telegram_chat_id,
+        "chat_id": chat_id,
         "text": text,
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,

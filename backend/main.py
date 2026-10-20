@@ -1,5 +1,12 @@
 """
 main.py — PlacementOS FastAPI application entry point.
+
+Free-tier hardening (Render):
+  * `/api/health` is intentionally lightweight and NEVER touches the DB, so it
+    answers instantly and the platform health check passes during cold start.
+  * Heavy init (DB, scheduler, Telegram) runs in a background task so the app
+    starts responding immediately instead of blocking on external services.
+  * A self-ping keep-alive job keeps the service warm while it is awake.
 """
 import asyncio
 from contextlib import asynccontextmanager
@@ -13,38 +20,55 @@ from api.routes import opportunities, import_, reminders, settings as settings_r
 from api.routes import storage as storage_router, gemini as gemini_router
 from api.routes.auth import router as auth_router
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("[Main] Starting PlacementOS AI Monitor...")
-    await connect_db()
-    await ensure_indexes()
-    start_scheduler()
+# Tracks how far background initialization has progressed (for /api/health).
+_boot_state = {"db": False, "userbot": False, "bot": False, "started_at": None}
 
-    userbot_task = None
+
+async def _background_init(userbot_container: dict, bot_container: dict):
+    """Run all slow startup work off the request path."""
+    import datetime as _dt
+    _boot_state["started_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+
+    # 1. Database — retry loop already handles Atlas cold starts.
+    connected = await connect_db()
+    _boot_state["db"] = connected
+    if connected:
+        await ensure_indexes()
+        # Start the background reconnect watchdog once we have a client.
+        from database import start_db_watchdog
+        start_db_watchdog()
+
+    # 2. Scheduler (in-process timer jobs)
+    try:
+        start_scheduler()
+    except Exception as e:
+        print(f"[Main] Scheduler start error: {e}")
+
+    # 3. Telegram userbot supervisor
     try:
         from userbot import run_userbot_forever
-        userbot_task = asyncio.create_task(run_userbot_forever())
+        userbot_container["task"] = asyncio.create_task(run_userbot_forever())
+        _boot_state["userbot"] = True
         print("[Main] Telegram userbot supervisor started")
     except Exception as e:
         print(f"[Main] Userbot error: {e}")
 
+    # 4. Optional startup self-test ping
     if settings.startup_ping and settings.telegram_bot_token and settings.telegram_chat_id:
-        async def _startup_ping():
-            try:
-                from services.notification_service import _send_message
-                await _send_message(
-                    "🟢 <b>PlacementOS is online</b> — auto-notifications are active. "
-                    "You'll be alerted here the moment a new drive drops."
-                )
-                print("[Main] Startup ping delivered — notification channel OK")
-            except Exception as e:
-                print(f"[Main] STARTUP PING FAILED: {e}\n"
-                      f"       → Auto-notifications will NOT arrive until this is fixed.\n"
-                      f"       → Open the bot in Telegram, press START, then verify "
-                      f"TELEGRAM_CHAT_ID in .env matches your numeric user id.")
-        asyncio.create_task(_startup_ping())
+        try:
+            from services.notification_service import _send_message
+            await _send_message(
+                "🟢 <b>PlacementOS is online</b> — auto-notifications are active. "
+                "You'll be alerted here the moment a new drive drops."
+            )
+            print("[Main] Startup ping delivered — notification channel OK")
+        except Exception as e:
+            print(f"[Main] STARTUP PING FAILED: {e}\n"
+                  f"       → Auto-notifications will NOT arrive until this is fixed.\n"
+                  f"       → Open the bot in Telegram, press START, then verify "
+                  f"TELEGRAM_CHAT_ID in .env matches your numeric user id.")
 
-    bot_app = None
+    # 5. Telegram bot polling
     if settings.telegram_bot_token and settings.telegram_chat_id:
         try:
             from telegram_bot import build_bot_app
@@ -52,18 +76,33 @@ async def lifespan(app: FastAPI):
             await bot_app.initialize()
             await bot_app.start()
             await bot_app.updater.start_polling(drop_pending_updates=True)
+            bot_container["app"] = bot_app
+            _boot_state["bot"] = True
         except Exception as e:
             print(f"[Main] Telegram bot error: {e}")
-            bot_app = None
     else:
         print("[Main] Telegram bot not configured — continuing without notifications.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("[Main] Starting PlacementOS AI Monitor...")
+    userbot_container: dict = {}
+    bot_container: dict = {}
+    init_task = asyncio.create_task(_background_init(userbot_container, bot_container))
 
     yield
 
     print("[Main] Shutting down...")
-    stop_scheduler()
-    if userbot_task:
-        userbot_task.cancel()
+    init_task.cancel()
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
+    task = userbot_container.get("task")
+    if task:
+        task.cancel()
+    bot_app = bot_container.get("app")
     if bot_app:
         try:
             await asyncio.wait_for(bot_app.updater.stop(), timeout=10)
@@ -125,28 +164,55 @@ apply_docs_policy(app)
 
 @app.get("/api/health")
 async def health():
+    """Ultra-light liveness probe — must NEVER block on the DB.
+
+    Used by Render's health check and by free uptime pingers. Returning
+    quickly even during cold start prevents the platform from killing the
+    container before background init finishes.
+    """
     try:
-        from services.watchdog import (
-            get_last_received,
-            get_userbot_error,
-            _userbot_running,
-        )
+        from services.watchdog import get_last_received, get_userbot_error, _userbot_running
         last = get_last_received()
         userbot_running = _userbot_running
-        return {
-            "status": "ok" if userbot_running else "degraded",
-            "userbot_running": userbot_running,
-            "last_message": last.isoformat() if last else None,
-            "userbot_error": get_userbot_error(),
-        }
-    except Exception as error:
-        print(f"[Health] Could not read userbot status: {error}")
-        return {
-            "status": "degraded",
-            "userbot_running": False,
-            "last_message": None,
-            "userbot_error": f"{type(error).__name__}: {error}",
-        }
+        userbot_error = get_userbot_error()
+    except Exception:
+        last, userbot_running, userbot_error = None, False, None
+
+    # "ok" as soon as the web process is up; everything else is informational.
+    return {
+        "status": "ok",
+        "db_ready": _boot_state["db"],
+        "userbot_running": userbot_running,
+        "bot_ready": _boot_state["bot"],
+        "boot_started_at": _boot_state["started_at"],
+        "last_message": last.isoformat() if last else None,
+        "userbot_error": userbot_error,
+    }
+
+
+@app.get("/api/health/deep")
+async def health_deep():
+    """Detailed status including a live DB ping — for diagnostics only."""
+    from database import is_db_ready, ensure_connection
+    db_reachable = await ensure_connection()
+    try:
+        from services.watchdog import get_last_received, get_userbot_error, _userbot_running
+        last = get_last_received()
+        userbot_running = _userbot_running
+        userbot_error = get_userbot_error()
+    except Exception:
+        last, userbot_running, userbot_error = None, False, None
+
+    return {
+        "status": "ok" if (db_reachable and userbot_running) else "degraded",
+        "db_reachable": db_reachable,
+        "db_ready": is_db_ready(),
+        "userbot_running": userbot_running,
+        "bot_ready": _boot_state["bot"],
+        "boot_started_at": _boot_state["started_at"],
+        "last_message": last.isoformat() if last else None,
+        "userbot_error": userbot_error,
+    }
 
 if __name__ == "__main__":
     import uvicorn

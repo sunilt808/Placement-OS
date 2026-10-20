@@ -16,9 +16,19 @@ def is_bad_company(name):
     """Check if company name is a garbage/hallucinated value."""
     if not name:
         return False
+    # Any name failing the tightened extractor validator is garbage.
+    # This catches multi-line fragments, ALL-CAPS headings, separator
+    # junk, blacklisted phrases, etc.
+    try:
+        if not _is_valid_company_name(name):
+            return True
+    except Exception:
+        pass
     if len(name) > 50:
         return True
-    if name[0].islower():
+    # Reject lowercase-first ONLY if the name has no internal capital
+    # (camel-case brands like "eInfochips" are valid).
+    if name[0].islower() and not any(ch.isupper() for ch in name[1:]):
         return True
     # Contains a sentence break (". Capitalized")
     if re.search(r'\.\s+[A-Z]', name):

@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     auto_notify_new_opportunity: bool = True   # Telegram ping on every NEW drive
     startup_ping: bool = True                  # delivery self-test on boot
 
+    # ── Keep-alive (Render free tier spin-down mitigation) ────────────────────
+    # A spun-down process cannot wake itself; this in-process ping keeps the
+    # service warm WHILE it is awake. Pair with a free external pinger.
+    self_ping_enabled: bool = True
+    self_ping_interval_minutes: int = 10
+    public_base_url: str = "https://placementos-api.onrender.com"
+
     # ── Cloud-storage guardian (Atlas M0 free tier ~512 MB) ───────────────────
     data_retention_days: int = 25     # auto-delete messages/opps older than this
     storage_limit_mb: int = 512       # provider quota

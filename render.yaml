@@ -52,6 +52,14 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_FLASH_MODEL
-        value: gemini-3.8-flash
+        value: gemini-3.5-flash
       - key: GEMINI_PRO_MODEL
         value: gemini-3.1-pro-preview
+
+      # ── Keep-alive / free-tier hardening ──────────────────────────────────
+      - key: SELF_PING_ENABLED
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        value: https://placementos-api.onrender.com
+      - key: SELF_PING_INTERVAL_MINUTES
+        value: "10"
